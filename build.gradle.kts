@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 
+import dev.chrisbanes.gradle.VerifyQuvenForkPublicationConfigurationTask
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.tasks.Copy
 
@@ -53,4 +54,50 @@ subprojects {
       }
     }
   }
+}
+
+val quvenForkPublishedModules = mapOf(
+  "haze-utils" to "haze-utils",
+  "haze" to "haze",
+  "haze-blur" to "haze-blur",
+  "haze-liquidglass" to "haze-liquidglass",
+  "haze-liquidglass-materials" to "haze-liquidglass-materials",
+)
+val quvenForkPublicationFiles = quvenForkPublishedModules.keys.map { moduleName ->
+  layout.projectDirectory.file("$moduleName/gradle.properties") to
+    layout.projectDirectory.file("$moduleName/build.gradle.kts")
+}
+val quvenForkReleaseWorkflowFiles = listOf(
+  ".github/workflows/build.yml",
+  ".github/workflows/close-issues.yml",
+  ".github/workflows/release.yml",
+).map(layout.projectDirectory::file)
+
+tasks.register<VerifyQuvenForkPublicationConfigurationTask>("verifyQuvenForkPublicationConfiguration") {
+  group = "verification"
+  description = "Verifies Quven fork coordinates, local publishing, and release gates."
+
+  projectDirectory.set(layout.projectDirectory)
+  rootGradlePropertiesFile.set(layout.projectDirectory.file("gradle.properties"))
+  settingsGradleFile.set(layout.projectDirectory.file("settings.gradle.kts"))
+  moduleGradlePropertiesFiles.from(quvenForkPublicationFiles.map { (propertiesFile, _) -> propertiesFile })
+  moduleBuildScriptFiles.from(quvenForkPublicationFiles.map { (_, buildScriptFile) -> buildScriptFile })
+  releaseWorkflowFiles.from(quvenForkReleaseWorkflowFiles)
+
+  expectedRootProperties.put("GROUP", "tv.quven.forks.haze")
+  expectedRootProperties.put("VERSION_NAME", "2.0.1-quven-SNAPSHOT")
+  expectedRootProperties.put("mavenCentralAutomaticPublishing", "false")
+  expectedRootProperties.put("mavenCentralPublishing", "false")
+  expectedRootProperties.put("signAllPublications", "false")
+  expectedRootProperties.put("haze.includeMavenLocal", "false")
+  expectedModuleArtifactIds.putAll(quvenForkPublishedModules)
+  forbiddenForkReleaseTokens.addAll(
+    "MAVEN_CENTRAL",
+    "GPG_KEY",
+    "mavenCentralUsername",
+    "mavenCentralPassword",
+    "signingInMemoryKey",
+    "Deploy to Sonatype",
+    "publish --no-configuration-cache",
+  )
 }

@@ -78,7 +78,7 @@ jobs:
             caches/build-cache-1
 
       - name: Assemble and check
-        run: ./gradlew check assembleDebug -Phaze.disableAppleTargets -Pandroidx.baselineprofile.skipgeneration
+        run: ./gradlew verifyQuvenForkPublicationConfiguration check assembleDebug -Phaze.disableAppleTargets -Pandroidx.baselineprofile.skipgeneration
         env:
           ORG_GRADLE_PROJECT_remoteBuildCacheUrl: ${{ secrets.GRADLE_REMOTE_CACHE_URL }}
           ORG_GRADLE_PROJECT_remoteBuildCacheUsername: ${{ secrets.GRADLE_REMOTE_CACHE_USERNAME }}
@@ -171,6 +171,7 @@ jobs:
         run: >
           ./gradlew --no-daemon --no-scan --no-configuration-cache
           --project-prop=haze.disableAppleTargets=true
+          verifyQuvenForkPublicationConfiguration
           :haze-utils:publishToMavenLocal
           :haze:publishToMavenLocal
           :haze-blur:publishToMavenLocal
