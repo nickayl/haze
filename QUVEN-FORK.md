@@ -12,6 +12,7 @@ This branch is a Quven-owned fork spike. It is not intended for upstream submiss
   - `tv.quven.forks.haze:haze-utils`
   - `tv.quven.forks.haze:haze-blur`
   - `tv.quven.forks.haze:haze-liquidglass`
+  - `tv.quven.forks.haze:haze-liquidglass-materials`
 
 ## Local Validation
 
@@ -33,7 +34,8 @@ Publish the fork artifacts to Maven Local with:
   :haze-utils:publishToMavenLocal `
   :haze:publishToMavenLocal `
   :haze-blur:publishToMavenLocal `
-  :haze-liquidglass:publishToMavenLocal
+  :haze-liquidglass:publishToMavenLocal `
+  :haze-liquidglass-materials:publishToMavenLocal
 ```
 
 ## Quven Integration Rule

@@ -9,7 +9,7 @@ plugins {
   id("dev.chrisbanes.kotlin.multiplatform")
   id("dev.chrisbanes.compose")
   id("org.jetbrains.dokka")
-  // Publishing is disabled until haze-liquidglass is published.
+  id("com.vanniktech.maven.publish")
   id("dev.chrisbanes.metalava")
 }
 
