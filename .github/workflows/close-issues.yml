@@ -6,6 +6,7 @@ on:
 
 jobs:
   close-issues:
+    if: vars.HAZE_ENABLE_ISSUE_AUTOMATION == 'true'
     runs-on: ubuntu-latest
 
     permissions:

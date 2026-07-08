@@ -9,6 +9,7 @@ permissions:
 
 jobs:
   release:
+    if: vars.HAZE_ENABLE_RELEASE_COMMENTS == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: apexskier/github-release-commenter@v1
