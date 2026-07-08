@@ -270,43 +270,15 @@ internal class RuntimeShaderLiquidGlassDelegate(
     retainedOutputAvailable = false
   }
 
-  private fun DrawScope.buildRenderParams(
+  private fun buildRenderParams(
     context: VisualEffectContext,
     scaleFactor: Float,
     layerSize: Size,
   ): RenderParams {
-    val density = context.requireDensity()
-    val layoutDirection = context.currentValueOf(LocalLayoutDirection)
-    val layerRadii = effect.shape.toCornerRadiiPx(
+    return effect.buildLiquidGlassRenderParams(
+      context = context,
+      scaleFactor = scaleFactor,
       layerSize = layerSize,
-      density = density,
-      layoutDirection = layoutDirection,
-    )
-    return RenderParams(
-      layerSize = layerSize,
-      refractionStrength = effect.refractionStrength.coerceIn(0f, 1f),
-      specularIntensity = effect.specularIntensity.coerceIn(0f, 1f),
-      depth = effect.depth.coerceIn(0f, 1f),
-      ambientResponse = effect.ambientResponse.coerceIn(0f, 1f),
-      tint = effect.tint,
-      edgeSoftnessPx = with(density) { effect.edgeSoftness.toPx() },
-      blurRadiusPx = with(density) { effect.blurRadius.toPx() },
-      progressive = effect.progressive,
-      refractionHeightPx = effect.refractionHeight.coerceIn(0f, 1f) * layerSize.minDimension,
-      chromaticAberrationStrength = effect.chromaticAberrationStrength.coerceIn(0f, 1f),
-      surfaceProfile = effect.surfaceProfile.ordinal.toFloat(),
-      chromaticAberrationMode = effect.chromaticAberrationMode.ordinal.toFloat(),
-      contrast = effect.contrast.coerceIn(-1f, 1f),
-      whitePoint = effect.whitePoint.coerceIn(-1f, 1f),
-      chromaMultiplier = effect.chromaMultiplier.coerceIn(0f, 2f),
-      refractionScale = effect.refractionScale.coerceAtLeast(0f),
-      contentNormalBlend = effect.contentNormalBlend.coerceIn(0f, 1f),
-      specularExponent = effect.specularExponent.coerceAtLeast(0f),
-      fresnelExponent = effect.fresnelExponent.coerceAtLeast(0f),
-      cornerRadii = layerRadii,
-      lightPosition = effect.lightPosition.takeOrElse {
-        context.layerSize.center * scaleFactor
-      },
     )
   }
 
@@ -336,6 +308,8 @@ internal class RuntimeShaderLiquidGlassDelegate(
   private fun buildRenderEffects(params: RenderParams): LiquidGlassRenderEffects {
     return createLiquidGlassRenderEffects(params) {
       setFloatUniform("layerSize", params.layerSize.width, params.layerSize.height)
+      setFloatUniform("effectOffset", params.effectOffset.x, params.effectOffset.y)
+      setFloatUniform("effectSize", params.effectSize.width, params.effectSize.height)
       setFloatUniform("refractionStrength", params.refractionStrength)
       setFloatUniform("specularIntensity", params.specularIntensity)
       setFloatUniform("depth", params.depth)
@@ -372,6 +346,8 @@ internal class RuntimeShaderLiquidGlassDelegate(
 
   internal data class RenderParams(
     val layerSize: Size,
+    val effectOffset: Offset,
+    val effectSize: Size,
     val refractionStrength: Float,
     val specularIntensity: Float,
     val depth: Float,
@@ -417,3 +393,47 @@ internal expect fun createLiquidGlassRenderEffects(
   params: RuntimeShaderLiquidGlassDelegate.RenderParams,
   uniforms: RuntimeShaderUniformProvider.() -> Unit,
 ): LiquidGlassRenderEffects
+
+internal fun LiquidGlassVisualEffect.buildLiquidGlassRenderParams(
+  context: VisualEffectContext,
+  scaleFactor: Float,
+  layerSize: Size,
+): RuntimeShaderLiquidGlassDelegate.RenderParams {
+  val density = context.requireDensity()
+  val layoutDirection = context.currentValueOf(LocalLayoutDirection)
+  val effectSize = context.size * scaleFactor
+  val effectOffset = context.layerOffset * scaleFactor
+  val layerRadii = shape.toCornerRadiiPx(
+    layerSize = context.size,
+    density = density,
+    layoutDirection = layoutDirection,
+  ).scaled(scaleFactor).normalizedFor(effectSize)
+  return RuntimeShaderLiquidGlassDelegate.RenderParams(
+    layerSize = layerSize,
+    effectOffset = effectOffset,
+    effectSize = effectSize,
+    refractionStrength = refractionStrength.coerceIn(0f, 1f),
+    specularIntensity = specularIntensity.coerceIn(0f, 1f),
+    depth = depth.coerceIn(0f, 1f),
+    ambientResponse = ambientResponse.coerceIn(0f, 1f),
+    tint = tint,
+    edgeSoftnessPx = with(density) { edgeSoftness.toPx() } * scaleFactor,
+    blurRadiusPx = with(density) { blurRadius.toPx() } * scaleFactor,
+    progressive = progressive,
+    refractionHeightPx = refractionHeight.coerceIn(0f, 1f) * effectSize.minDimension,
+    chromaticAberrationStrength = chromaticAberrationStrength.coerceIn(0f, 1f),
+    surfaceProfile = surfaceProfile.ordinal.toFloat(),
+    chromaticAberrationMode = chromaticAberrationMode.ordinal.toFloat(),
+    contrast = contrast.coerceIn(-1f, 1f),
+    whitePoint = whitePoint.coerceIn(-1f, 1f),
+    chromaMultiplier = chromaMultiplier.coerceIn(0f, 2f),
+    refractionScale = refractionScale.coerceAtLeast(0f) * scaleFactor,
+    contentNormalBlend = contentNormalBlend.coerceIn(0f, 1f),
+    specularExponent = specularExponent.coerceAtLeast(0f),
+    fresnelExponent = fresnelExponent.coerceAtLeast(0f),
+    cornerRadii = layerRadii,
+    lightPosition = lightPosition.takeOrElse {
+      context.size.center
+    } * scaleFactor + effectOffset,
+  )
+}

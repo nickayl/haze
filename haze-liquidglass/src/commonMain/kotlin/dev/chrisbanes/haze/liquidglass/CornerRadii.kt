@@ -19,6 +19,38 @@ internal data class CornerRadii(
 ) {
   fun isZero(): Boolean = this == zero
 
+  fun scaled(scaleFactor: Float): CornerRadii {
+    return CornerRadii(
+      topLeft = topLeft * scaleFactor,
+      topRight = topRight * scaleFactor,
+      bottomRight = bottomRight * scaleFactor,
+      bottomLeft = bottomLeft * scaleFactor,
+    )
+  }
+
+  fun normalizedFor(size: Size): CornerRadii {
+    val width = size.width.sanitizedDimension()
+    val height = size.height.sanitizedDimension()
+    if (width <= 0f || height <= 0f) return zero
+
+    val positive = CornerRadii(
+      topLeft = topLeft.sanitizedRadius(),
+      topRight = topRight.sanitizedRadius(),
+      bottomRight = bottomRight.sanitizedRadius(),
+      bottomLeft = bottomLeft.sanitizedRadius(),
+    )
+
+    val scale = minOf(
+      1f,
+      sideScale(width, positive.topLeft + positive.topRight),
+      sideScale(width, positive.bottomLeft + positive.bottomRight),
+      sideScale(height, positive.topLeft + positive.bottomLeft),
+      sideScale(height, positive.topRight + positive.bottomRight),
+    )
+
+    return if (scale < 1f) positive.scaled(scale) else positive
+  }
+
   companion object {
     val zero: CornerRadii = CornerRadii(0f, 0f, 0f, 0f)
   }
@@ -34,7 +66,7 @@ internal fun RoundedCornerShape.toCornerRadiiPx(
   val bottomEndPx = bottomEnd.toPx(layerSize, density)
   val bottomStartPx = bottomStart.toPx(layerSize, density)
 
-  return if (layoutDirection == LayoutDirection.Ltr) {
+  val radii = if (layoutDirection == LayoutDirection.Ltr) {
     CornerRadii(
       topLeft = topStartPx,
       topRight = topEndPx,
@@ -49,6 +81,8 @@ internal fun RoundedCornerShape.toCornerRadiiPx(
       bottomLeft = bottomEndPx,
     )
   }
+
+  return radii.normalizedFor(layerSize)
 }
 
 internal fun CornerRadii.toRoundRect(size: Size): RoundRect = RoundRect(
@@ -63,3 +97,15 @@ internal fun CornerRadii.toRoundRect(size: Size): RoundRect = RoundRect(
 )
 
 internal fun CornerRadii.toPath(size: Size): Path = Path().apply { addRoundRect(toRoundRect(size)) }
+
+private fun Float.sanitizedRadius(): Float {
+  return takeIf { it.isFinite() && it > 0f } ?: 0f
+}
+
+private fun Float.sanitizedDimension(): Float {
+  return takeIf { it.isFinite() && it > 0f } ?: 0f
+}
+
+private fun sideScale(limit: Float, sum: Float): Float {
+  return if (sum > limit && sum > 0f) limit / sum else 1f
+}

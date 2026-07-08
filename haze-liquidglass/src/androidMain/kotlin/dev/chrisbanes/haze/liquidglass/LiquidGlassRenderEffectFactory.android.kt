@@ -81,6 +81,8 @@ private fun RuntimeShaderUniformProvider.setMaskUniforms(
   params: RuntimeShaderLiquidGlassDelegate.RenderParams,
 ) {
   setFloatUniform("layerSize", params.layerSize.width, params.layerSize.height)
+  setFloatUniform("effectOffset", params.effectOffset.x, params.effectOffset.y)
+  setFloatUniform("effectSize", params.effectSize.width, params.effectSize.height)
   setFloatUniform("edgeSoftness", params.edgeSoftnessPx)
   setFloatUniform(
     "cornerRadii",

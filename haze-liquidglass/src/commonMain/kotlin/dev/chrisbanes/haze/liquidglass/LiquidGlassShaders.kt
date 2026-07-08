@@ -34,6 +34,8 @@ internal object LiquidGlassShaders {
     uniform shader content;
     ${if (contentMode == ContentMode.DualInput) "uniform shader blurredContent;" else ""}
     uniform float2 layerSize;
+    uniform float2 effectOffset;
+    uniform float2 effectSize;
     uniform float refractionStrength;
     uniform float specularIntensity;
     uniform float depth;
@@ -135,8 +137,9 @@ internal object LiquidGlassShaders {
     }
 
     float surfaceHeightAt(vec2 coord, float customRadius) {
-      vec2 halfSize = layerSize * 0.5;
-      vec2 centeredCoord = coord - halfSize;
+      vec2 halfSize = effectSize * 0.5;
+      vec2 effectCoord = coord - effectOffset;
+      vec2 centeredCoord = effectCoord - halfSize;
       float sd = sdRoundedRect(centeredCoord, halfSize, customRadius);
       float distToEdge = max(-sd, 0.0);
       float refractionZone = max(refractionHeight, 0.0001);
@@ -146,8 +149,9 @@ internal object LiquidGlassShaders {
     }
 
     float surfaceHeight(vec2 coord) {
-      vec2 halfSize = layerSize * 0.5;
-      vec2 centeredCoord = coord - halfSize;
+      vec2 halfSize = effectSize * 0.5;
+      vec2 effectCoord = coord - effectOffset;
+      vec2 centeredCoord = effectCoord - halfSize;
       float radius = radiusAt(centeredCoord, cornerRadii);
       return surfaceHeightAt(coord, radius);
     }
@@ -172,8 +176,10 @@ internal object LiquidGlassShaders {
       return normalize(vec3(grad, 1.0));
     }
 
-    float edgeMask(float distToEdge) {
+    float edgeMask(float sd) {
+      if (sd > 0.0) return 0.0;
       if (edgeSoftness <= 0.0) return 1.0;
+      float distToEdge = max(-sd, 0.0);
       float e = clamp(distToEdge / max(edgeSoftness, 0.0001), 0.0, 1.0);
       return smootherstep(e);
     }
@@ -272,8 +278,9 @@ internal object LiquidGlassShaders {
     }
 
     vec4 main(vec2 coord) {
-      vec2 halfSize = layerSize * 0.5;
-      vec2 centeredCoord = coord - halfSize;
+      vec2 halfSize = effectSize * 0.5;
+      vec2 effectCoord = coord - effectOffset;
+      vec2 centeredCoord = effectCoord - halfSize;
       float radius = radiusAt(centeredCoord, cornerRadii);
 
       // Actual SDF for edge mask and distance (preserves exact shape).
@@ -289,7 +296,7 @@ internal object LiquidGlassShaders {
 
         // Deep interior: surface gradient is negligible, use content normal only.
         vec3 normal = computeContentNormal(coord);
-        vec2 lightDir2D = normalize(lightPosition - coord);
+        vec2 lightDir2D = safeNormalize(lightPosition - coord, vec2(0.0, -1.0));
         vec3 lightDir = normalize(vec3(lightDir2D, 1.0));
         float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent);
         float ambient = mix(1.0, 1.0 + fresnel, clamp(ambientResponse, 0.0, 1.0));
@@ -330,7 +337,7 @@ internal object LiquidGlassShaders {
       ${refractedDepthMix(contentMode)}
       vec3 graded = applyColorGrading(vec4(mixedColor, 1.0)).rgb;
       vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
-      vec2 lightDir2D = normalize(lightPosition - coord);
+      vec2 lightDir2D = safeNormalize(lightPosition - coord, vec2(0.0, -1.0));
       vec3 lightDir = normalize(vec3(lightDir2D, 1.0));
       float spec = pow(max(dot(normal, lightDir), 0.0), specularExponent) * specularIntensity; // Specular highlight exponent
       float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent); // Fresnel edge glow exponent
@@ -342,6 +349,8 @@ internal object LiquidGlassShaders {
   fun buildOutputMask(): String = """
     uniform shader content;
     uniform float2 layerSize;
+    uniform float2 effectOffset;
+    uniform float2 effectSize;
     uniform float edgeSoftness;
     uniform vec4 cornerRadii;
 
@@ -368,8 +377,9 @@ internal object LiquidGlassShaders {
     }
 
     float shapeMask(vec2 coord) {
-      vec2 halfSize = layerSize * 0.5;
-      vec2 centeredCoord = coord - halfSize;
+      vec2 halfSize = effectSize * 0.5;
+      vec2 effectCoord = coord - effectOffset;
+      vec2 centeredCoord = effectCoord - halfSize;
       float radius = radiusAt(centeredCoord, cornerRadii);
       float sd = sdRoundedRect(centeredCoord, halfSize, radius);
       if (sd > 0.0) return 0.0;
@@ -453,7 +463,7 @@ internal object LiquidGlassShaders {
     ContentMode.SingleBlurredInput,
     -> """
       vec3 finalColor = mix(tinted, refractedColor, refractionStrength) * ambient + spec;
-      float edge = edgeMask(distToEdge);
+      float edge = edgeMask(sd);
       return vec4(finalColor, base.a) * edge;
     """
 

@@ -88,8 +88,32 @@ class LiquidGlassShadersTest {
 
   @Test
   fun shader_uses_smootherstep_edge_mask() {
-    val shader = LiquidGlassShaders.build()
+    val shader = LiquidGlassShaders.build(hasBlurredContent = true)
+    assertThat(shader).contains("float edgeMask(float sd)")
+    assertThat(shader).contains("if (sd > 0.0) return 0.0;")
+    assertThat(shader).contains("float distToEdge = max(-sd, 0.0);")
     assertThat(shader).contains("return smootherstep(e);")
+    assertThat(shader).contains("float edge = edgeMask(sd);")
+  }
+
+  @Test
+  fun shader_usesEffectBoundsForShapeGeometry() {
+    val shader = LiquidGlassShaders.build()
+
+    assertThat(shader).contains("uniform float2 effectOffset;")
+    assertThat(shader).contains("uniform float2 effectSize;")
+    assertThat(shader).contains("vec2 halfSize = effectSize * 0.5;")
+    assertThat(shader).contains("vec2 effectCoord = coord - effectOffset;")
+    assertThat(shader).contains("vec2 centeredCoord = effectCoord - halfSize;")
+    assertThat(shader).doesNotContain("vec2 halfSize = layerSize * 0.5;")
+  }
+
+  @Test
+  fun shader_usesSafeLightDirection() {
+    val shader = LiquidGlassShaders.build()
+
+    assertThat(shader).contains("safeNormalize(lightPosition - coord, vec2(0.0, -1.0))")
+    assertThat(shader).doesNotContain("normalize(lightPosition - coord)")
   }
 
   @Test
@@ -210,6 +234,9 @@ class LiquidGlassShadersTest {
   fun outputMaskShaderClipsOutsideRoundedShape() {
     val shader = LiquidGlassShaders.buildOutputMask()
 
+    assertThat(shader).contains("uniform float2 effectOffset;")
+    assertThat(shader).contains("uniform float2 effectSize;")
+    assertThat(shader).contains("vec2 effectCoord = coord - effectOffset;")
     assertThat(shader).contains("if (sd > 0.0) return 0.0;")
     assertThat(shader).contains("return content.eval(coord) * shapeMask(coord);")
   }
