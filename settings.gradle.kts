@@ -42,12 +42,13 @@ develocity {
     termsOfUseUrl.set("https://gradle.com/help/legal-terms-of-use")
     termsOfUseAgree.set("yes")
 
+    publishing.onlyIf { isCi }
+
     if (isCi) {
-      publishing.onlyIf { true }
       tag("CI")
     }
 
-    uploadInBackground.set(!isCi)
+    uploadInBackground.set(false)
   }
 }
 
