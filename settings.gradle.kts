@@ -19,6 +19,9 @@ pluginManagement {
   }
 }
 
+val includeMavenLocal: Boolean =
+  providers.gradleProperty("haze.includeMavenLocal").map(String::toBoolean).getOrElse(false)
+
 dependencyResolutionManagement {
   repositories {
     mavenCentral()
@@ -27,7 +30,9 @@ dependencyResolutionManagement {
     // Compose Multiplatform pre-releases
     // maven("https://maven.pkg.jetbrains.space/public/p/compose/dev")
 
-    mavenLocal()
+    if (includeMavenLocal) {
+      mavenLocal()
+    }
   }
 }
 
