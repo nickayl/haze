@@ -38,6 +38,12 @@ Publish the fork artifacts to Maven Local with:
   :haze-liquidglass-materials:publishToMavenLocal
 ```
 
+## Upstream Divergences To Re-Check On Rebase
+
+- `lightPosition` is remapped from node-local to layer coordinates (scaled by the input scale
+  factor, offset by the effect offset) in `buildLiquidGlassRenderParams`; upstream passes the raw
+  value through. Screenshot goldens encode the remapped behavior.
+
 ## Quven Integration Rule
 
 Do not point Quven production directly at this branch. Consume it only behind Quven's existing

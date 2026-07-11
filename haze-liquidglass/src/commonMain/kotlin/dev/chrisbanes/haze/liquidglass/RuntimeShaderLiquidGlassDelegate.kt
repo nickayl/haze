@@ -432,6 +432,7 @@ internal fun LiquidGlassVisualEffect.buildLiquidGlassRenderParams(
     specularExponent = specularExponent.coerceAtLeast(0f),
     fresnelExponent = fresnelExponent.coerceAtLeast(0f),
     cornerRadii = layerRadii,
+    // Node-local -> layer coordinates; upstream passes the raw value through.
     lightPosition = lightPosition.takeOrElse {
       context.size.center
     } * scaleFactor + effectOffset,
