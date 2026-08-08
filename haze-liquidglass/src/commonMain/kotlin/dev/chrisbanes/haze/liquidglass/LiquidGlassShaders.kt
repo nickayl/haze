@@ -159,7 +159,9 @@ internal object LiquidGlassShaders {
     }
 
     vec2 surfaceGradient(vec2 coord) {
-      float sampleStep = 2.0;
+      // One pixel would alias while the surface scrolls: the height field changes faster than the
+      // sample spacing near the rim, and the normal flickers between frames.
+      float sampleStep = 3.0;
       float left = surfaceHeight(clampCoord(coord - vec2(sampleStep, 0.0)));
       float right = surfaceHeight(clampCoord(coord + vec2(sampleStep, 0.0)));
       float up = surfaceHeight(clampCoord(coord - vec2(0.0, sampleStep)));
@@ -204,6 +206,23 @@ internal object LiquidGlassShaders {
      * bends away again by n2/n1. Modelling only the first interface exaggerates the displacement
      * and, worse, keeps bending light that a real slab would have straightened on the way out.
      */
+    /**
+     * What the rim reflects, sampled from the scene itself.
+     *
+     * A mirror shows its surroundings, not a grey. With no environment map the nearest honest
+     * approximation is the content plane seen along the reflected ray: the surface normal turns the
+     * view vector outwards, and the further the ray travels before meeting the plane the further
+     * across the backdrop it lands. A flat grey rim is what made the edge read as painted on.
+     */
+    vec3 reflectedEnvironment(vec2 coord, vec3 normal, float thickness) {
+      vec3 view = vec3(0.0, 0.0, -1.0);
+      vec3 mirrored = reflect(view, normal);
+      // Grazing reflections run nearly parallel to the plane, so the travel is clamped to keep the
+      // sample on screen instead of smearing the border pixel along the rim.
+      float travel = clamp(thickness / max(abs(mirrored.z), 0.2), 0.0, thickness * 4.0);
+      return content.eval(clampCoord(coord + mirrored.xy * travel)).rgb;
+    }
+
     vec2 refractionOffsetAt(vec2 coord, float thickness, float ior) {
       vec2 slope = surfaceGradient(coord);
       vec3 normal = normalize(vec3(-slope, 1.0));
@@ -588,7 +607,7 @@ internal object LiquidGlassShaders {
       vec3 overlayColor = graded * ambient * baseCoeff +
         refractedColor * ambient * refractedCoeff +
         tintColor.rgb * ambient * tintWeight +
-        vec3(reflectance) * (0.6 + specularIntensity) +
+        reflectedEnvironment(coord, shapeNormal, glassThickness) * reflectance +
         spec;
       // The other modes mask their return by the edge; this one did not, so the glass kept drawing
       // past its own shape and bled outwards. Real glass ends where the shape ends.

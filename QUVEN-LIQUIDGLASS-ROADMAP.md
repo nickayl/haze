@@ -18,6 +18,28 @@ This file tracks Quven-only work on the public fork. Do not open upstream issues
 - Liquid Glass remains experimental and source-only upstream. The Quven fork is intentionally publishing local snapshot artifacts for controlled Quven experiments.
 - `haze-liquidglass-materials` contains initial presets, but those presets are demo-grade for Quven: `depth` and blur radii are high enough to require careful device performance validation.
 
+## Refraction rewritten as physics on 2026-08-08
+
+The Android overlay path no longer approximates. The surface slope gives a normal, Snell bends the
+ray at the front face, it crosses the slab and straightens at the flat back face, and lands on the
+content plane. Dispersion gives each channel its own index. The interface splits energy with the
+exact Fresnel equations for unpolarised light, and the transmitted share weighs the content, so the
+rim closes into a bright line while the centre stays clear. Tint is Beer-Lambert absorption over
+the path actually travelled.
+
+Rejected with reasons, so they are not retried:
+
+- Schlick's approximation for reflectance. It keeps its angular term when the two media match and
+  reports a bright rim for glass with an index of one, which is air.
+- A single interface. It exaggerates the bend and never straightens the ray on the way out.
+- `SurfaceProfile.Squircle` for the Quven style: it reintroduces a visible inner boundary.
+- Raising blur to hide a legible backdrop: an erased backdrop has no structure left to bend, so the
+  refraction that names the material becomes invisible. Blur and lensing trade against each other.
+
+The debug sample draws on a neutral grey rather than a blue-to-cyan wash. Dispersion separates
+channels, and a backdrop with almost no red energy has nothing to separate, so fringes could never
+appear there no matter how strong the setting.
+
 ## Fixed on 2026-08-08
 
 Five defects in the Android overlay path, each reproduced in `LiquidGlassDebugSample` on a physical
