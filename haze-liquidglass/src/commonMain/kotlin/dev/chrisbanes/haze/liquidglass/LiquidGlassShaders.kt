@@ -252,10 +252,11 @@ internal object LiquidGlassShaders {
      */
     float microfacetSpecular(vec3 normal, vec3 lightDir, float roughness) {
       vec3 view = vec3(0.0, 0.0, 1.0);
-      vec3 half = normalize(lightDir + view);
+      // Not named `half`: that is a reserved type in AGSL and the shader fails to compile.
+      vec3 halfVector = normalize(lightDir + view);
       float nDotV = max(dot(normal, view), 0.0001);
       float nDotL = max(dot(normal, lightDir), 0.0);
-      float nDotH = max(dot(normal, half), 0.0);
+      float nDotH = max(dot(normal, halfVector), 0.0);
       float d = distributionGGX(nDotH, roughness);
       float g = geometrySmith(nDotV, nDotL, roughness);
       return (d * g) / max(4.0 * nDotV * nDotL, 0.0001) * nDotL;

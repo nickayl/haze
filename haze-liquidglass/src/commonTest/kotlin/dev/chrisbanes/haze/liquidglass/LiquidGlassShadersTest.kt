@@ -38,6 +38,18 @@ class LiquidGlassShadersTest {
   }
 
   @Test
+  fun shader_avoidsReservedTypeNamesAsIdentifiers() {
+    val shader = LiquidGlassShaders.build()
+
+    // AGSL reserves these as types. Declaring one as a variable compiles here and fails on the
+    // device at the first draw, taking the app down with it.
+    for (reserved in listOf("half", "half2", "half3", "half4", "short", "sampler")) {
+      val declaration = Regex("""\b(vec[234]|float|int|bool)\s+$reserved\b""")
+      assertTrue(!declaration.containsMatchIn(shader), "$reserved is declared as a variable")
+    }
+  }
+
+  @Test
   fun shader_contains_flat_interior_early_out() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = true)
     assertThat(shader).contains("if (distToEdge >= refractionZone)")
