@@ -164,7 +164,88 @@ internal object LiquidGlassShaders {
       float right = surfaceHeight(clampCoord(coord + vec2(sampleStep, 0.0)));
       float up = surfaceHeight(clampCoord(coord - vec2(0.0, sampleStep)));
       float down = surfaceHeight(clampCoord(coord + vec2(0.0, sampleStep)));
-      return vec2(right - left, down - up) * 0.25;
+      // True central difference: dh/dx, dh/dy. The surface normal depends on the real slope, so a
+      // scaled-down gradient tilts the normal too little and the refraction never bends much.
+      return vec2(right - left, down - up) / (2.0 * sampleStep);
+    }
+
+    /**
+     * Where a viewing ray lands on the backdrop after entering the glass, in pixels from the
+     * sampling point. Ortho view, so the incident ray is straight down; the surface normal comes
+     * from the slope of the glass, the ray bends by Snell's law, and it travels the thickness of
+     * the glass before reaching the content behind it.
+     */
+    /**
+     * Fresnel reflectance at an air-to-glass interface for unpolarised light.
+     *
+     * At normal incidence only about 4% of the light reflects and the rest is transmitted; as the
+     * surface turns away the reflected share rises until, at grazing angles, the interface behaves
+     * as a mirror. This is the partition that makes a real glass edge bright and opaque while its
+     * centre stays clear, and it is energy conserving: what reflects does not also refract.
+     *
+     * The exact equations are used rather than Schlick's approximation because Schlick degenerates
+     * when the two media match: it keeps its angular term and reports a bright rim for glass with
+     * an index of one, which is air and reflects nothing at any angle.
+     */
+    float fresnelReflectance(vec3 normal, float ior) {
+      float cosI = clamp(normal.z, 0.0, 1.0);
+      float sinT = (1.0 / ior) * sqrt(max(0.0, 1.0 - cosI * cosI));
+      if (sinT >= 1.0) return 1.0;                       // total internal reflection
+      float cosT = sqrt(max(0.0, 1.0 - sinT * sinT));
+      float rs = (cosI - ior * cosT) / max(cosI + ior * cosT, 0.0001);
+      float rp = (ior * cosI - cosT) / max(ior * cosI + cosT, 0.0001);
+      return clamp((rs * rs + rp * rp) * 0.5, 0.0, 1.0);
+    }
+
+    /**
+     * Where a viewing ray lands on the backdrop, having crossed both faces of the glass.
+     *
+     * Entering, the ray bends towards the normal by n1/n2; leaving through the flat back face it
+     * bends away again by n2/n1. Modelling only the first interface exaggerates the displacement
+     * and, worse, keeps bending light that a real slab would have straightened on the way out.
+     */
+    vec2 refractionOffsetAt(vec2 coord, float thickness, float ior) {
+      vec2 slope = surfaceGradient(coord);
+      vec3 normal = normalize(vec3(-slope, 1.0));
+      vec3 incident = vec3(0.0, 0.0, -1.0);
+      vec3 entering = refract(incident, normal, 1.0 / ior);
+      // Total internal reflection returns zero; fall back to no displacement rather than garbage.
+      if (dot(entering, entering) < 0.0001) return vec2(0.0);
+
+      // Travel through the slab to the back face, which is flat and faces the viewer.
+      vec2 inside = entering.xy * (thickness / max(-entering.z, 0.05));
+      vec3 backNormal = vec3(0.0, 0.0, 1.0);
+      vec3 leaving = refract(entering, backNormal, ior);
+      if (dot(leaving, leaving) < 0.0001) return inside;
+
+      // Beyond the back face the ray continues to the content plane. Keeping that leg proportional
+      // to the slab keeps the whole construction scale free.
+      return inside + leaving.xy * (thickness / max(-leaving.z, 0.05));
+    }
+
+    vec2 refractionOffset(vec2 coord, float thickness) {
+      // refractionStrength selects how dense the glass is: 0 is air and bends nothing.
+      return refractionOffsetAt(coord, thickness, mix(1.0, 1.55, clamp(refractionStrength, 0.0, 1.0)));
+    }
+
+    /**
+     * Dispersion: glass bends short wavelengths harder than long ones, so each channel gets its own
+     * index and its own landing point. That is what fringes a rim magenta on one side and cyan on
+     * the other, and it follows the whole perimeter because it follows the surface slope.
+     */
+    vec4 sampleDispersed(vec2 coord, float thickness) {
+      float base = mix(1.0, 1.55, clamp(refractionStrength, 0.0, 1.0));
+      float spread = base * 0.35 * clamp(chromaticAberrationStrength, 0.0, 1.0);
+      vec2 red = coord + refractionOffsetAt(coord, thickness, base - spread);
+      vec2 green = coord + refractionOffsetAt(coord, thickness, base);
+      vec2 blue = coord + refractionOffsetAt(coord, thickness, base + spread);
+      vec4 centre = content.eval(clampCoord(green));
+      return vec4(
+        content.eval(clampCoord(red)).r,
+        centre.g,
+        content.eval(clampCoord(blue)).b,
+        centre.a
+      );
     }
 
     float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
@@ -314,24 +395,17 @@ internal object LiquidGlassShaders {
 
       float h = surfaceHeight(coord);
       float heightNorm = clamp(h / refractionZone, 0.0, 1.0);
-      // Proportional to the zone, so the same style lenses identically on a chip and on a sheet.
-      // A fixed pixel scale made the effect invisible on anything but a very small element.
-      float displacementMagnitude = -heightNorm * refractionStrength * refractionScale * refractionZone;
 
-      float smoothRadius = max(radius * 1.5, 30.0);
-      float gradRadius = min(smoothRadius, min(halfSize.x, halfSize.y));
-      vec2 centerFallbackDir = vec2(1.0, 0.0);
-      vec2 refractionDir = safeNormalize(
-        gradSdRoundedRect(centeredCoord, halfSize, gradRadius) +
-          depth * safeNormalize(centeredCoord, centerFallbackDir),
-        centerFallbackDir
-      );
-      vec2 displacement = refractionDir * displacementMagnitude;
+      // Snell's law through a glass of this thickness, rather than an offset along the distance
+      // field scaled by a constant. The bending now follows the surface slope, so it vanishes on
+      // the flat interior and grows into the curve on its own.
+      float glassThickness = refractionZone * refractionScale;
+      vec2 displacement = refractionOffset(coord, glassThickness);
       vec2 refractCoord = clampCoord(coord + displacement);
 
-      float cornerWeight = abs((centeredCoord.x * centeredCoord.y) / max(halfSize.x * halfSize.y, 0.001));
-      vec2 chromaOffset = displacement * chromaticAberrationStrength * 0.5 * cornerWeight;
-      vec4 refracted = sampleChroma(refractCoord, chromaOffset);
+      // Dispersion replaces the old corner-weighted offset, which only fringed the extreme corners
+      // because its weight was |x*y| and therefore zero along both centre axes.
+      vec4 refracted = sampleDispersed(coord, glassThickness);
       ${refractedDepthSample(contentMode)}
       ${refractedColor(contentMode)}
 
@@ -489,16 +563,32 @@ internal object LiquidGlassShaders {
       float depthAmount = clamp(depth, 0.0, 1.0);
       float refractionAmount = clamp(refractionStrength, 0.0, 1.0);
       float tintAlpha = clamp(tintColor.a, 0.0, 1.0);
+
+      // Energy split at the interface: what reflects cannot also transmit. Near the centre the
+      // surface faces the viewer and almost everything passes through; towards the rim the surface
+      // turns away and reflectance climbs to one, which is why a real glass edge reads as a bright
+      // opaque line rather than as a lit version of the content behind it.
+      float reflectance = fresnelReflectance(shapeNormal, mix(1.0, 1.55, refractionAmount));
+      float transmittance = 1.0 - reflectance;
+
       // Depth must attenuate the refracted contribution exactly as it attenuates the base one.
       // Scaling only the base left this band far more opaque than the flat interior, and the step
       // between them drew a hard rectangle inset by the refraction height.
-      float contentAmount = (1.0 - depthAmount) * (1.0 - tintAlpha);
+      // Beer-Lambert: a ray crossing the slab loses intensity as exp(-alpha * distance), and the
+      // path is longer where the glass is thicker and where the ray runs at an angle. This is what
+      // makes a tint deepen towards the rim on its own, instead of lying over the whole surface as
+      // a flat veil.
+      float pathLength = (1.0 + heightNorm) / max(shapeNormal.z, 0.15);
+      float absorption = exp(-tintAlpha * 1.6 * pathLength);
+      float contentAmount = (1.0 - depthAmount) * absorption * transmittance;
+      float tintWeight = (1.0 - absorption) * (1.0 - reflectance);
       float baseCoeff = contentAmount * (1.0 - refractionAmount);
       float refractedCoeff = contentAmount * refractionAmount;
-      float overlayAlpha = baseCoeff + refractedCoeff + tintAlpha;
+      float overlayAlpha = baseCoeff + refractedCoeff + tintWeight + reflectance;
       vec3 overlayColor = graded * ambient * baseCoeff +
         refractedColor * ambient * refractedCoeff +
-        tintColor.rgb * ambient * tintAlpha +
+        tintColor.rgb * ambient * tintWeight +
+        vec3(reflectance) * (0.6 + specularIntensity) +
         spec;
       // The other modes mask their return by the edge; this one did not, so the glass kept drawing
       // past its own shape and bled outwards. Real glass ends where the shape ends.

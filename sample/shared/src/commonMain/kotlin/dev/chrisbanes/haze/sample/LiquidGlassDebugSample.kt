@@ -48,9 +48,11 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
         .hazeSource(state = hazeState)
         .background(
           brush = Brush.verticalGradient(
+            // Neutral grey, like the surface Apple shows the material on. A blue-to-cyan wash has
+            // almost no red energy, so dispersion has nothing to separate and fringes never appear.
             colors = listOf(
-              Color(0xFF1E88E5), // Bright blue
-              Color(0xFF00ACC1), // Cyan
+              Color(0xFFE8E8EA),
+              Color(0xFF5A5A60),
             ),
           ),
         ),
@@ -66,7 +68,7 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
         repeat(20) { i ->
           Text(
             text = "█████ Line ${i + 1} █████████████████",
-            color = Color.White.copy(alpha = 0.3f),
+            color = Color.Black.copy(alpha = 0.45f),
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
           )
@@ -168,7 +170,7 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
           depth = 0.78f
           blurRadius = 24.dp
           edgeSoftness = 0.dp
-          chromaticAberrationStrength = 0.03f
+          chromaticAberrationStrength = 0.45f
           shape = RoundedCornerShape(28.dp)
         }
 

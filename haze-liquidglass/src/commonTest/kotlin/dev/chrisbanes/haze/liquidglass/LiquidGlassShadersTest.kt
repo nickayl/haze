@@ -12,43 +12,29 @@ import kotlin.test.assertTrue
 class LiquidGlassShadersTest {
 
   @Test
-  fun shader_uses_analytical_gradient_direction_for_refraction() {
+  fun shader_refracts_by_snells_law_through_both_faces() {
     val shader = LiquidGlassShaders.build()
 
-    // Direction-only refraction path: analytical rounded-rect gradient with mild smoothing
-    // and center bias, instead of deriving displacement direction from `surfaceGradient()`.
-    assertThat(shader).contains("vec2 gradSdRoundedRect(vec2 coord, vec2 halfSize, float radius)")
-    assertThat(shader).contains("vec2 axisSafeSign(vec2 value)")
-    assertThat(shader).contains("vec2 safeNormalize(vec2 value, vec2 fallback)")
-    assertThat(shader).contains("vec2 centerFallbackDir = vec2(1.0, 0.0);")
-    assertThat(shader).contains("float gradRadius =")
-    assertThat(shader).contains("depth * safeNormalize(centeredCoord, centerFallbackDir)")
-    assertThat(shader).contains("vec2 refractionDir = safeNormalize(")
-    assertThat(shader).contains("vec2 displacement = refractionDir * displacementMagnitude;")
+    // Displacement comes from Snell's law applied to the surface slope, not from an offset along
+    // the distance field scaled by a constant. A slab has two faces, and modelling only the first
+    // exaggerates the bend and never straightens the ray on its way out.
+    assertThat(shader).contains("vec3 entering = refract(incident, normal, 1.0 / ior);")
+    assertThat(shader).contains("vec3 leaving = refract(entering, backNormal, ior);")
+    assertThat(shader).contains("vec2 slope = surfaceGradient(coord);")
+    assertThat(shader).contains("vec3 normal = normalize(vec3(-slope, 1.0));")
 
-    // Exact-shape magnitude path remains based on the sampled surface height.
-    assertThat(shader).contains("float h = surfaceHeight(coord);")
-    assertThat(shader).contains("float displacementMagnitude =")
+    // Energy is split at the interface, using the exact equations: Schlick keeps its angular term
+    // when the two media match and would report a bright rim for glass with an index of one.
+    assertThat(shader).contains("float fresnelReflectance(vec3 normal, float ior)")
+    assertThat(shader).contains("float transmittance = 1.0 - reflectance;")
+    assertThat(shader).doesNotContain("r0 + (1.0 - r0) * pow(1.0 - cosTheta, fresnelExponent)")
 
-    // Specular normal should stay on the existing sampled-height path for this experiment.
-    assertThat(shader).contains("vec2 grad = surfaceGradient(coord);")
-    assertThat(shader).contains("vec3 shapeNormal = normalize(vec3(-grad.x, -grad.y, 1.0));")
+    // Absorption follows Beer-Lambert over the path actually travelled through the slab.
+    assertThat(shader).contains("float absorption = exp(-tintAlpha * 1.6 * pathLength);")
 
-    // Inside corners should use the broader edge-to-arc blend from the pass-2 refinement.
-    assertThat(shader).contains("float edgeBlend =")
-    assertThat(shader).contains("vec2 edgeDir = safeNormalize(")
-    assertThat(shader).contains("float cornerProximity =")
-    assertThat(shader).contains("smoothstep(-radius, 0.0, cornerCoord.x)")
-    assertThat(shader).contains("smoothstep(-radius, 0.0, cornerCoord.y)")
-    assertThat(shader).contains("vec2 arcDir = safeNormalize(-cornerCoord, vec2(0.70710678, 0.70710678));")
-    assertThat(shader).contains("vec2 insideDir = mix(edgeDir, arcDir, cornerProximity);")
-    assertThat(shader).contains("return coordSign * safeNormalize(insideDir, edgeDir);")
-
-    assertThat(shader).doesNotContain("float cornerBlend = smoothstep(-2.0, 2.0, cornerDelta);")
-    assertThat(shader).doesNotContain("vec2 insideDir = mix(vec2(0.0, 1.0), vec2(1.0, 0.0), cornerBlend);")
-
-    assertThat(shader).doesNotContain("float gradX = step(cornerCoord.y, cornerCoord.x);")
-    assertThat(shader).doesNotContain("return coordSign * vec2(gradX, 1.0 - gradX);")
+    // The old direction-only construction is gone.
+    assertThat(shader).doesNotContain("vec2 centerFallbackDir = vec2(1.0, 0.0);")
+    assertThat(shader).doesNotContain("float displacementMagnitude =")
   }
 
   @Test
@@ -61,8 +47,12 @@ class LiquidGlassShadersTest {
   @Test
   fun shader_contains_corner_weighted_dispersion() {
     val shader = LiquidGlassShaders.build()
-    assertThat(shader).contains("float cornerWeight = abs((centeredCoord.x * centeredCoord.y) / max(halfSize.x * halfSize.y, 0.001));")
-    assertThat(shader).contains("* cornerWeight;")
+    // Dispersion gives each channel its own index, so fringes follow the whole perimeter. The old
+    // corner weight was |x*y|, which is zero along both centre axes and could only tint the four
+    // extreme corners.
+    assertThat(shader).doesNotContain("cornerWeight")
+    assertThat(shader).contains("refractionOffsetAt(coord, thickness, base - spread)")
+    assertThat(shader).contains("refractionOffsetAt(coord, thickness, base + spread)")
   }
 
   @Test
@@ -135,9 +125,10 @@ class LiquidGlassShadersTest {
   @Test
   fun shader_flat_interior_skips_surface_gradient() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = true)
-    val earlyOutSection = shader.substringAfter("if (distToEdge >= refractionZone)")
+    val earlyOutSection = shader.substringAfter("if (distToEdge >= refractionZone) {")
       .substringBefore("return vec4(finalColor, base.a);")
-    assertThat(earlyOutSection).doesNotContain("surfaceGradient(coord)")
+    // The flat interior needs no slope: with no curvature there is nothing to bend.
+    assertThat(earlyOutSection).doesNotContain("refractionOffset(")
   }
 
   @Test
@@ -189,9 +180,9 @@ class LiquidGlassShadersTest {
     assertThat(shader).contains(
       "float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);",
     )
-    assertThat(shader).contains("float contentAmount = (1.0 - depthAmount) * (1.0 - tintAlpha);")
+    assertThat(shader).contains("float contentAmount = (1.0 - depthAmount) * absorption * transmittance;")
     assertThat(shader).contains("float overlayAlpha = contentAmount + tintAlpha;")
-    assertThat(shader).contains("float overlayAlpha = baseCoeff + refractedCoeff + tintAlpha;")
+    assertThat(shader).contains("float overlayAlpha = baseCoeff + refractedCoeff + tintWeight + reflectance;")
   }
 
   @Test
