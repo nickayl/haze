@@ -152,7 +152,10 @@ public class LiquidGlassVisualEffect() : VisualEffect, RetainedOutputVisualEffec
 
   override fun calculateLayerBounds(rect: Rect, density: Density): Rect {
     val softnessPx = with(density) { edgeSoftness.toPx() }
-    return if (softnessPx > 0f) rect.inflate(softnessPx) else rect
+    // Refraction samples outside the shape. Without that margin the sampler clamps to the last
+    // column of the layer and replicates it, which is the vertical smear along the long sides.
+    val margin = softnessPx + refractionStrength * refractionScale
+    return if (margin > 0f) rect.inflate(margin) else rect
   }
 
   override fun shouldPreferClipToAreaBounds(): Boolean = edgeSoftness <= 0.dp && shape.hasZeroCornerRadii()

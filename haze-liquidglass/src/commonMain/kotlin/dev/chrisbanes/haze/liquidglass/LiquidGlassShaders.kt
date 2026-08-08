@@ -142,7 +142,9 @@ internal object LiquidGlassShaders {
       vec2 centeredCoord = effectCoord - halfSize;
       float sd = sdRoundedRect(centeredCoord, halfSize, customRadius);
       float distToEdge = max(-sd, 0.0);
-      float refractionZone = max(refractionHeight, 0.0001);
+      // The zone cannot exceed a quarter of the shorter side. On a pill the cap is entirely corner,
+      // so an unbounded zone makes the whole cap maximum-height and it saturates into a bright blob.
+      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y) * 0.5), 0.0001);
       if (distToEdge >= refractionZone) return 0.0;
       float t = clamp(distToEdge / refractionZone, 0.0, 1.0);
       return evaluateProfile(t) * refractionZone;
@@ -339,8 +341,13 @@ internal object LiquidGlassShaders {
       vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
       vec2 lightDir2D = safeNormalize(lightPosition - coord, vec2(0.0, -1.0));
       vec3 lightDir = normalize(vec3(lightDir2D, 1.0));
-      float spec = pow(max(dot(normal, lightDir), 0.0), specularExponent) * specularIntensity; // Specular highlight exponent
-      float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent); // Fresnel edge glow exponent
+      // Confined to the rim by the same falloff that drives the displacement. Unmasked it saturates
+      // into a white band along every straight edge, because the edge normal stays aligned with the
+      // light for the whole run of the side.
+      float spec = pow(max(dot(normal, lightDir), 0.0), specularExponent) * specularIntensity * heightNorm;
+      // Fresnel brightens what the glass already emits, so it follows the rim falloff too. Applied
+      // flat it multiplies the whole edge run and blows the sides out to white.
+      float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent) * heightNorm;
       float ambient = mix(1.0, 1.0 + fresnel, clamp(ambientResponse, 0.0, 1.0));
       ${refractedReturn(contentMode)}
     }
