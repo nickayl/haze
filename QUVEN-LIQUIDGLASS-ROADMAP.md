@@ -18,6 +18,33 @@ This file tracks Quven-only work on the public fork. Do not open upstream issues
 - Liquid Glass remains experimental and source-only upstream. The Quven fork is intentionally publishing local snapshot artifacts for controlled Quven experiments.
 - `haze-liquidglass-materials` contains initial presets, but those presets are demo-grade for Quven: `depth` and blur radii are high enough to require careful device performance validation.
 
+## Fixed on 2026-08-08
+
+Five defects in the Android overlay path, each reproduced in `LiquidGlassDebugSample` on a physical
+device before it was touched. The sample now carries a `6. Quven chrome` card with the exact style
+the app applies, which is how an app-only symptom was reproduced away from the app.
+
+1. Interior and refracted band composed differently. The interior weighed content by `1 - depth`
+   while the band used `(1 - depth)(1 - refraction) + refraction`, so a typical style made the band
+   nearly twice as opaque and the step drew a hard rectangle inset by the refraction height.
+2. The tint rode on that content weight, so a dark tint faded out as depth rose and a dark panel
+   turned milky. It now keeps its own alpha over the blurred underlay.
+3. Specular and fresnel had no edge falloff. Along a straight edge the normal stays aligned with the
+   light for the whole run, so both saturated into a white band. Both now follow the rim falloff,
+   which also makes the two branches meet continuously.
+4. The refraction zone was unbounded, so on a pill the whole cap sat at maximum height and lit up.
+   It is capped at a quarter of the shorter side.
+5. Refraction displacement was a fixed pixel amount defaulting to 12, so the lensing was invisible
+   on anything larger than a chip - the sample's own instruction to expect obvious warping did not
+   hold. It is now proportional to the refraction zone, and `refractionScale` is a dimensionless
+   multiplier.
+
+Rejected after measuring: `SurfaceProfile.Squircle` for the Quven style. It reintroduces a visible
+inner boundary with diagonal corners; `Circle` stays correct here.
+
+Still open: per-element glass rather than per-panel, and a rim highlight that follows curvature
+rather than a uniform falloff. Both are needed before the result reads like the iOS reference.
+
 ## Suspended Work
 
 1. Fork artifact completeness.

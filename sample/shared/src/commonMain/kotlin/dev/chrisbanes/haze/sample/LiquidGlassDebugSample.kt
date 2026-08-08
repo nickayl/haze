@@ -162,8 +162,8 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
           specularIntensity = 0.32f
           ambientResponse = 0.35f
           chromaMultiplier = 0.95f
-          depth = 0.55f
-          blurRadius = 4.dp
+          depth = 0.78f
+          blurRadius = 44.dp
           edgeSoftness = 12.dp
           chromaticAberrationStrength = 0.03f
           shape = RoundedCornerShape(28.dp)
