@@ -26,6 +26,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavHostController
@@ -155,6 +156,8 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
           hazeState = hazeState,
           title = "6. Quven chrome",
           modifier = Modifier.weight(1f),
+          width = 300.dp,
+          height = 420.dp,
         ) {
           tint = Color(0xFF0A0A0A).copy(alpha = 0.30f)
           refractionStrength = 0.70f
@@ -163,8 +166,8 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
           ambientResponse = 0.35f
           chromaMultiplier = 0.95f
           depth = 0.78f
-          blurRadius = 44.dp
-          edgeSoftness = 12.dp
+          blurRadius = 120.dp
+          edgeSoftness = 0.dp
           chromaticAberrationStrength = 0.03f
           shape = RoundedCornerShape(28.dp)
         }
@@ -194,11 +197,13 @@ private fun TestCard(
   hazeState: HazeState,
   title: String,
   modifier: Modifier = Modifier,
+  width: Dp = 120.dp,
+  height: Dp = 160.dp,
   config: dev.chrisbanes.haze.liquidglass.LiquidGlassVisualEffect.() -> Unit,
 ) {
   Card(
     modifier = modifier
-      .size(width = 120.dp, height = 160.dp)
+      .size(width = width, height = height)
       .clip(RoundedCornerShape(12.dp))
       .hazeEffect(state = hazeState) {
         liquidGlassEffect(config)

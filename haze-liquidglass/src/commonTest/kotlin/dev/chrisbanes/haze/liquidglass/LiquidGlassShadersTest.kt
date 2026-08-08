@@ -7,6 +7,7 @@ import assertk.assertThat
 import assertk.assertions.contains
 import assertk.assertions.doesNotContain
 import kotlin.test.Test
+import kotlin.test.assertTrue
 
 class LiquidGlassShadersTest {
 
@@ -166,7 +167,16 @@ class LiquidGlassShadersTest {
   fun shader_singleInputVariantPremultipliesOverlayColor() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = false)
 
-    assertThat(shader).contains("return vec4(overlayColor, base.a * overlayAlpha);")
+    assertThat(shader).contains("vec4(overlayColor, base.a * overlayAlpha) * edgeMask(sd)")
+  }
+
+  @Test
+  fun shader_overlayModeStopsAtTheShapeEdge() {
+    val shader = LiquidGlassShaders.build(hasBlurredContent = false)
+
+    // Both overlay returns mask by the edge. Without it the glass drew past its own shape and bled
+    // outwards, which reads as a halo rather than as glass.
+    assertTrue(Regex("""\* edgeMask\(sd\)""").findAll(shader).count() == 2)
   }
 
   @Test

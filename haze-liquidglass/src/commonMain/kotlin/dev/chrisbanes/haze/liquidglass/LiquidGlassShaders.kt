@@ -448,7 +448,7 @@ internal object LiquidGlassShaders {
         float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);
         float overlayAlpha = contentAmount + tintAlpha;
         vec3 overlayColor = graded * ambient * contentAmount + tintColor.rgb * ambient * tintAlpha;
-        return vec4(overlayColor, base.a * overlayAlpha);
+        return vec4(overlayColor, base.a * overlayAlpha) * edgeMask(sd);
     """
   }
 
@@ -500,7 +500,9 @@ internal object LiquidGlassShaders {
         refractedColor * ambient * refractedCoeff +
         tintColor.rgb * ambient * tintAlpha +
         spec;
-      return vec4(overlayColor, base.a * overlayAlpha);
+      // The other modes mask their return by the edge; this one did not, so the glass kept drawing
+      // past its own shape and bled outwards. Real glass ends where the shape ends.
+      return vec4(overlayColor, base.a * overlayAlpha) * edgeMask(sd);
     """
   }
 }
