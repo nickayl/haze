@@ -302,7 +302,10 @@ internal object LiquidGlassShaders {
      */
     vec4 sampleDispersed(vec2 coord, float thickness) {
       float base = mix(1.0, 1.55, clamp(refractionStrength, 0.0, 1.0));
-      float spread = base * 0.35 * clamp(chromaticAberrationStrength, 0.0, 1.0);
+      // No index may fall below one: that is the vacuum, and a medium thinner than air would bend
+      // the long wavelength the wrong way, swapping the fringes. With a weak refraction or a strong
+      // dispersion the naive spread crosses that floor, so it is capped by the headroom available.
+      float spread = min(base * 0.35 * clamp(chromaticAberrationStrength, 0.0, 1.0), base - 1.0);
       vec2 red = coord + refractionOffsetAt(coord, thickness, base - spread);
       vec2 green = coord + refractionOffsetAt(coord, thickness, base);
       vec2 blue = coord + refractionOffsetAt(coord, thickness, base + spread);

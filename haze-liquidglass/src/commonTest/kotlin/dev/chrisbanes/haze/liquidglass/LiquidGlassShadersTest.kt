@@ -38,6 +38,28 @@ class LiquidGlassShadersTest {
   }
 
   @Test
+  fun shader_keepsEveryWavelengthAtOrAboveTheVacuumIndex() {
+    val shader = LiquidGlassShaders.build()
+
+    // Dispersion spreads the index around the base one. Unbounded, a weak refraction or a strong
+    // aberration pushes the long wavelength below one, which is a medium thinner than vacuum: the
+    // ray then bends the wrong way and the fringes swap sides. The spread is capped by the headroom
+    // above one, so air disperses nothing and glass disperses at most down to air.
+    assertThat(shader).contains("min(base * 0.35 * clamp(chromaticAberrationStrength, 0.0, 1.0), base - 1.0)")
+  }
+
+  @Test
+  fun shader_boundsTheTermsThatCanRunAway() {
+    val shader = LiquidGlassShaders.build()
+
+    // Roughness derived from an exponent approaching zero, and a reflection at a grazing angle,
+    // both diverge; each is clamped rather than left to produce a division blow-up on device.
+    assertThat(shader).contains("clamp(sqrt(2.0 / (max(specularExponent, 2.0) + 2.0)), 0.02, 1.0)")
+    assertThat(shader).contains("clamp(thickness / max(abs(mirrored.z), 0.2), 0.0, thickness * 4.0)")
+    assertThat(shader).contains("if (sinT >= 1.0) return 1.0;")
+  }
+
+  @Test
   fun shader_avoidsReservedTypeNamesAsIdentifiers() {
     val shader = LiquidGlassShaders.build()
 
