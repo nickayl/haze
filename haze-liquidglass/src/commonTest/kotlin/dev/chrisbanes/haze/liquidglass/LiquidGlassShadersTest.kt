@@ -49,6 +49,23 @@ class LiquidGlassShadersTest {
   }
 
   @Test
+  fun shader_honoursTheChromaticAberrationModeItAdvertises() {
+    val shader = LiquidGlassShaders.build()
+
+    // The mode is a public property with a default. After the model rewrite its uniform was still
+    // sent while nothing read it, so choosing the spectral mode changed nothing at all. Spectral
+    // now refracts four more wavelengths in their own right rather than blending the primaries.
+    assertThat(shader).contains("if (chromaticAberrationMode == 1 && spread > 0.0001)")
+    assertThat(shader).contains("refractionOffsetAt(coord, thickness, base - spread * 0.66)")
+    assertThat(shader).contains("refractionOffsetAt(coord, thickness, base + spread * 0.66)")
+
+    // The samplers the rewrite orphaned are gone; leaving them lengthened every shader compile on
+    // device for code no path could reach.
+    assertThat(shader).doesNotContain("sampleChromaFull")
+    assertThat(shader).doesNotContain("sampleChromaSimple")
+  }
+
+  @Test
   fun shader_boundsTheTermsThatCanRunAway() {
     val shader = LiquidGlassShaders.build()
 

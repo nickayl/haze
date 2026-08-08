@@ -310,6 +310,27 @@ internal object LiquidGlassShaders {
       vec2 green = coord + refractionOffsetAt(coord, thickness, base);
       vec2 blue = coord + refractionOffsetAt(coord, thickness, base + spread);
 
+      // Spectral mode traces four more wavelengths between the primaries. Each one is refracted in
+      // its own right rather than interpolated, so the band between red and blue resolves instead
+      // of being a straight blend of the two ends.
+      if (chromaticAberrationMode == 1 && spread > 0.0001) {
+        vec2 orange = coord + refractionOffsetAt(coord, thickness, base - spread * 0.66);
+        vec2 yellow = coord + refractionOffsetAt(coord, thickness, base - spread * 0.33);
+        vec2 cyan = coord + refractionOffsetAt(coord, thickness, base + spread * 0.33);
+        vec2 violet = coord + refractionOffsetAt(coord, thickness, base + spread * 0.66);
+        vec4 mid = content.eval(clampCoord(green));
+        return vec4(
+          (content.eval(clampCoord(red)).r +
+            content.eval(clampCoord(orange)).r +
+            content.eval(clampCoord(yellow)).r) / 3.0,
+          (content.eval(clampCoord(yellow)).g + mid.g + content.eval(clampCoord(cyan)).g) / 3.0,
+          (content.eval(clampCoord(cyan)).b +
+            content.eval(clampCoord(violet)).b +
+            content.eval(clampCoord(blue)).b) / 3.0,
+          mid.a
+        );
+      }
+
       // A rough surface transmits into a cone rather than a single direction, so the view through
       // it softens. This is where a glass gets its haze from; a separate blurred copy mixed in
       // underneath was never part of the material.
@@ -350,66 +371,6 @@ internal object LiquidGlassShaders {
       return smootherstep(e);
     }
 
-    vec4 sampleChromaSimple(vec2 coord, vec2 chromaOffset) {
-      if (chromaticAberrationStrength <= 0.0001) return content.eval(clampCoord(coord));
-      vec2 forward = clampCoord(coord + chromaOffset);
-      vec2 backward = clampCoord(coord - chromaOffset);
-      vec4 base = content.eval(clampCoord(coord));
-      return vec4(content.eval(forward).r, base.g, content.eval(backward).b, base.a);
-    }
-
-    /**
-     * Full spectral chromatic aberration that samples the refracted content at seven
-     * wavelength offsets (red through purple) and blends them with position-dependent
-     * intensity. Much more expensive than the simple mode but produces a realistic
-     * prismatic edge when chromaticAberrationStrength is high.
-     */
-    vec4 sampleChromaFull(vec2 coord, vec2 chromaOffset) {
-      if (length(chromaOffset) < 0.0001) return content.eval(clampCoord(coord));
-
-      vec4 color = vec4(0.0);
-
-      vec4 red = content.eval(clampCoord(coord + chromaOffset));
-      color.r += red.r / 3.5;
-      color.a += red.a / 7.0;
-
-      vec4 orange = content.eval(clampCoord(coord + chromaOffset * (2.0 / 3.0)));
-      color.r += orange.r / 3.5;
-      color.g += orange.g / 7.0;
-      color.a += orange.a / 7.0;
-
-      vec4 yellow = content.eval(clampCoord(coord + chromaOffset * (1.0 / 3.0)));
-      color.r += yellow.r / 3.5;
-      color.g += yellow.g / 3.5;
-      color.a += yellow.a / 7.0;
-
-      vec4 green = content.eval(clampCoord(coord));
-      color.g += green.g / 3.5;
-      color.a += green.a / 7.0;
-
-      vec4 cyan = content.eval(clampCoord(coord - chromaOffset * (1.0 / 3.0)));
-      color.g += cyan.g / 3.5;
-      color.b += cyan.b / 3.0;
-      color.a += cyan.a / 7.0;
-
-      vec4 blue = content.eval(clampCoord(coord - chromaOffset * (2.0 / 3.0)));
-      color.b += blue.b / 3.0;
-      color.a += blue.a / 7.0;
-
-      vec4 purple = content.eval(clampCoord(coord - chromaOffset));
-      color.r += purple.r / 7.0;
-      color.b += purple.b / 3.0;
-      color.a += purple.a / 7.0;
-
-      return color;
-    }
-
-    vec4 sampleChroma(vec2 coord, vec2 chromaOffset) {
-      if (chromaticAberrationMode == 1) {
-        return sampleChromaFull(coord, chromaOffset);
-      }
-      return sampleChromaSimple(coord, chromaOffset);
-    }
 
     ${blurredContentSampler(contentMode)}
 
