@@ -159,14 +159,14 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
           width = 300.dp,
           height = 420.dp,
         ) {
-          tint = Color(0xFF0A0A0A).copy(alpha = 0.30f)
+          tint = Color(0xFF0A0A0A).copy(alpha = 0.18f)
           refractionStrength = 0.70f
-          refractionHeight = 0.25f
+          refractionHeight = 0.45f
           specularIntensity = 0.32f
           ambientResponse = 0.35f
           chromaMultiplier = 0.95f
           depth = 0.78f
-          blurRadius = 120.dp
+          blurRadius = 24.dp
           edgeSoftness = 0.dp
           chromaticAberrationStrength = 0.03f
           shape = RoundedCornerShape(28.dp)

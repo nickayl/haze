@@ -142,9 +142,9 @@ internal object LiquidGlassShaders {
       vec2 centeredCoord = effectCoord - halfSize;
       float sd = sdRoundedRect(centeredCoord, halfSize, customRadius);
       float distToEdge = max(-sd, 0.0);
-      // The zone cannot exceed a quarter of the shorter side. On a pill the cap is entirely corner,
-      // so an unbounded zone makes the whole cap maximum-height and it saturates into a bright blob.
-      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y) * 0.5), 0.0001);
+      // Bounded by the shorter half-extent so the profile stays defined; the cap blow-out this
+      // once guarded against is now handled at its source, by masking the rim lighting.
+      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y)), 0.0001);
       if (distToEdge >= refractionZone) return 0.0;
       float t = clamp(distToEdge / refractionZone, 0.0, 1.0);
       return evaluateProfile(t) * refractionZone;
@@ -292,7 +292,7 @@ internal object LiquidGlassShaders {
       // Flat-interior early-out: skip refraction when far from edge.
       // Same bound as surfaceHeightAt: the two must agree or the interior test and the displacement
       // disagree about where the glass edge ends.
-      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y) * 0.5), 0.0001);
+      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y)), 0.0001);
       if (distToEdge >= refractionZone) {
         vec4 base = content.eval(coord);
         ${flatInteriorDepthMix(contentMode)}
