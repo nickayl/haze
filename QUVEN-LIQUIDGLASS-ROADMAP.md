@@ -18,6 +18,22 @@ This file tracks Quven-only work on the public fork. Do not open upstream issues
 - Liquid Glass remains experimental and source-only upstream. The Quven fork is intentionally publishing local snapshot artifacts for controlled Quven experiments.
 - `haze-liquidglass-materials` contains initial presets, but those presets are demo-grade for Quven: `depth` and blur radii are high enough to require careful device performance validation.
 
+## Frozen on 2026-08-08
+
+Quven is pinned back to the official `dev.chrisbanes.haze:haze:1.7.2`. The result did not reach the
+owner's quality bar against the Apple reference, so the app returns to the painted glass while this
+branch keeps the work.
+
+Nothing here is abandoned. Everything below is committed and pushed, with the reasoning and the
+rejected experiments, so resuming does not repeat today's dead ends. To resume: point the Quven
+catalogue at `tv.quven.forks.haze`, restore the scoped `mavenLocal`, and migrate the four call
+sites that sit behind the Quven wrappers.
+
+What still separates the result from the reference, in order of impact: the surface profile is a
+heuristic curve rather than a defined lens geometry; thickness is constant, so there is no spherical
+aberration; and Apple applies the material to small individual elements, where the refraction zone
+covers most of the surface, rather than to full panels.
+
 ## Refraction rewritten as physics on 2026-08-08
 
 The Android overlay path no longer approximates. The surface slope gives a normal, Snell bends the
