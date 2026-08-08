@@ -150,6 +150,25 @@ fun LiquidGlassDebugSample(navController: NavHostController) {
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(16.dp),
       ) {
+        // Quven chrome: the exact style the app applies to its menu panel and bottom bar.
+        TestCard(
+          hazeState = hazeState,
+          title = "6. Quven chrome",
+          modifier = Modifier.weight(1f),
+        ) {
+          tint = Color(0xFF0A0A0A).copy(alpha = 0.30f)
+          refractionStrength = 0.70f
+          refractionHeight = 0.25f
+          specularIntensity = 0.32f
+          ambientResponse = 0.35f
+          chromaMultiplier = 0.95f
+          depth = 0.55f
+          blurRadius = 4.dp
+          edgeSoftness = 12.dp
+          chromaticAberrationStrength = 0.03f
+          shape = RoundedCornerShape(28.dp)
+        }
+
         TestCard(
           hazeState = hazeState,
           title = "5. Rounded + Chroma",

@@ -166,8 +166,31 @@ class LiquidGlassShadersTest {
   fun shader_singleInputVariantPremultipliesOverlayColor() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = false)
 
-    assertThat(shader).contains("return vec4(finalColor * overlayAlpha, base.a * overlayAlpha);")
     assertThat(shader).contains("return vec4(overlayColor, base.a * overlayAlpha);")
+  }
+
+  @Test
+  fun shader_overlayInteriorAndRefractedBandShareTheSameOpacity() {
+    val shader = LiquidGlassShaders.build(hasBlurredContent = false)
+
+    // Both branches must weigh re-emitted content by (1 - depth) * (1 - tintAlpha) and add the tint
+    // at its own alpha. When they disagreed, the step between them drew a hard rectangle inset by
+    // the refraction height.
+    assertThat(shader).contains(
+      "float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);",
+    )
+    assertThat(shader).contains("float contentAmount = (1.0 - depthAmount) * (1.0 - tintAlpha);")
+    assertThat(shader).contains("float overlayAlpha = contentAmount + tintAlpha;")
+    assertThat(shader).contains("float overlayAlpha = baseCoeff + refractedCoeff + tintAlpha;")
+  }
+
+  @Test
+  fun shader_rimLightingFadesToNothingInTheInterior() {
+    val shader = LiquidGlassShaders.build(hasBlurredContent = false)
+
+    // Unmasked, both terms saturate along every straight edge into a white band.
+    assertThat(shader).contains("specularIntensity * heightNorm")
+    assertThat(shader).contains("fresnelExponent) * heightNorm")
   }
 
   @Test

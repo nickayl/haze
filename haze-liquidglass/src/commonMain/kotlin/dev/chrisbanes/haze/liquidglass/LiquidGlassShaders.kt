@@ -439,10 +439,16 @@ internal object LiquidGlassShaders {
     ContentMode.SingleBlurredInput,
     -> "return vec4(finalColor, base.a);"
 
+    // The tint belongs to the glass, not to the content behind it, so it keeps its own weight over
+    // the blurred underlay while only the re-emitted content follows depth. The refracted branch
+    // below composes the same way, which is what keeps the two continuous.
     ContentMode.OverlayWithExternalUnderlay ->
       """
-        float overlayAlpha = 1.0 - clamp(depth, 0.0, 1.0);
-        return vec4(finalColor * overlayAlpha, base.a * overlayAlpha);
+        float tintAlpha = clamp(tintColor.a, 0.0, 1.0);
+        float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);
+        float overlayAlpha = contentAmount + tintAlpha;
+        vec3 overlayColor = graded * ambient * contentAmount + tintColor.rgb * ambient * tintAlpha;
+        return vec4(overlayColor, base.a * overlayAlpha);
     """
   }
 
@@ -482,12 +488,18 @@ internal object LiquidGlassShaders {
       """
       float depthAmount = clamp(depth, 0.0, 1.0);
       float refractionAmount = clamp(refractionStrength, 0.0, 1.0);
-      float baseCoeff = (1.0 - depthAmount) * (1.0 - refractionAmount);
-      float refractedCoeff = refractionAmount;
-      float overlayAlpha = baseCoeff + refractedCoeff;
-      vec3 baseColor = tinted * ambient;
-      vec3 refractedColorPremul = refractedColor * ambient;
-      vec3 overlayColor = baseColor * baseCoeff + refractedColorPremul * refractedCoeff + spec;
+      float tintAlpha = clamp(tintColor.a, 0.0, 1.0);
+      // Depth must attenuate the refracted contribution exactly as it attenuates the base one.
+      // Scaling only the base left this band far more opaque than the flat interior, and the step
+      // between them drew a hard rectangle inset by the refraction height.
+      float contentAmount = (1.0 - depthAmount) * (1.0 - tintAlpha);
+      float baseCoeff = contentAmount * (1.0 - refractionAmount);
+      float refractedCoeff = contentAmount * refractionAmount;
+      float overlayAlpha = baseCoeff + refractedCoeff + tintAlpha;
+      vec3 overlayColor = graded * ambient * baseCoeff +
+        refractedColor * ambient * refractedCoeff +
+        tintColor.rgb * ambient * tintAlpha +
+        spec;
       return vec4(overlayColor, base.a * overlayAlpha);
     """
   }
