@@ -8,7 +8,8 @@ This file tracks Quven-only work on the public fork. Do not open upstream issues
 - Maven group: `tv.quven.forks.haze`.
 - Version: `2.0.1-quven-SNAPSHOT`.
 - Base: upstream `main` after the Android Liquid Glass blur, depth, retained-output, and trim-memory fixes.
-- Quven app status: Quven still consumes Haze 1.x. Haze 2.x must be integrated behind Quven wrappers before app production usage.
+- Quven app status: back on official Haze 1.x. The Haze 2 integration behind the Quven wrappers was
+  done and reverted on 2026-08-08 (see the freeze note below) - it is not work still to be invented.
 
 ## Confirmed State
 
@@ -71,7 +72,10 @@ the app applies, which is how an app-only symptom was reproduced away from the a
    light for the whole run, so both saturated into a white band. Both now follow the rim falloff,
    which also makes the two branches meet continuously.
 4. The refraction zone was unbounded, so on a pill the whole cap sat at maximum height and lit up.
-   It is capped at a quarter of the shorter side.
+   It was first capped at a quarter of the shorter side; that cap was then removed once the rim
+   masks fixed the blow-out at its source, because on a wide surface it compressed the refraction
+   into a strip and made `refractionHeight` inert. The bound is now the shorter half-extent, which
+   only keeps the profile defined.
 5. Refraction displacement was a fixed pixel amount defaulting to 12, so the lensing was invisible
    on anything larger than a chip - the sample's own instruction to expect obvious warping did not
    hold. It is now proportional to the refraction zone, and `refractionScale` is a dimensionless

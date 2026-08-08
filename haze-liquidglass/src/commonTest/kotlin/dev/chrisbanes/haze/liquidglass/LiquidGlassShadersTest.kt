@@ -96,7 +96,7 @@ class LiquidGlassShadersTest {
   }
 
   @Test
-  fun shader_contains_corner_weighted_dispersion() {
+  fun shader_disperses_along_the_whole_perimeter_not_only_the_corners() {
     val shader = LiquidGlassShaders.build()
     // Dispersion gives each channel its own index, so fringes follow the whole perimeter. The old
     // corner weight was |x*y|, which is zero along both centre axes and could only tint the four
