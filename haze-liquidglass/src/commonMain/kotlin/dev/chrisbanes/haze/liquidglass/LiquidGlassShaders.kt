@@ -214,6 +214,53 @@ internal object LiquidGlassShaders {
      * view vector outwards, and the further the ray travels before meeting the plane the further
      * across the backdrop it lands. A flat grey rim is what made the edge read as painted on.
      */
+    /**
+     * Roughness derived from the specular exponent, so the existing control keeps its meaning: a
+     * high exponent is a polished surface and a low one is satin.
+     */
+    float surfaceRoughness() {
+      return clamp(sqrt(2.0 / (max(specularExponent, 2.0) + 2.0)), 0.02, 1.0);
+    }
+
+    /**
+     * GGX normal distribution: the share of microfacets whose normal points along the half vector.
+     * It has the long tail real surfaces show, which Blinn-Phong lacks, so a rough glass keeps a
+     * soft halo around its highlight instead of ending abruptly.
+     */
+    float distributionGGX(float nDotH, float roughness) {
+      float a = roughness * roughness;
+      float a2 = a * a;
+      float d = nDotH * nDotH * (a2 - 1.0) + 1.0;
+      return a2 / max(3.14159265 * d * d, 0.0001);
+    }
+
+    /**
+     * Smith geometry term with the Schlick-GGX approximation: the fraction of microfacets that are
+     * neither shadowed nor masked by their neighbours at these angles.
+     */
+    float geometrySmith(float nDotV, float nDotL, float roughness) {
+      float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+      float gv = nDotV / max(nDotV * (1.0 - k) + k, 0.0001);
+      float gl = nDotL / max(nDotL * (1.0 - k) + k, 0.0001);
+      return gv * gl;
+    }
+
+    /**
+     * Cook-Torrance specular for one directional light, without the Fresnel factor: the caller
+     * already computed reflectance for the interface and multiplying it twice would double count
+     * the energy leaving the surface.
+     */
+    float microfacetSpecular(vec3 normal, vec3 lightDir, float roughness) {
+      vec3 view = vec3(0.0, 0.0, 1.0);
+      vec3 half = normalize(lightDir + view);
+      float nDotV = max(dot(normal, view), 0.0001);
+      float nDotL = max(dot(normal, lightDir), 0.0);
+      float nDotH = max(dot(normal, half), 0.0);
+      float d = distributionGGX(nDotH, roughness);
+      float g = geometrySmith(nDotV, nDotL, roughness);
+      return (d * g) / max(4.0 * nDotV * nDotL, 0.0001) * nDotL;
+    }
+
     vec3 reflectedEnvironment(vec2 coord, vec3 normal, float thickness) {
       vec3 view = vec3(0.0, 0.0, -1.0);
       vec3 mirrored = reflect(view, normal);
@@ -258,11 +305,24 @@ internal object LiquidGlassShaders {
       vec2 red = coord + refractionOffsetAt(coord, thickness, base - spread);
       vec2 green = coord + refractionOffsetAt(coord, thickness, base);
       vec2 blue = coord + refractionOffsetAt(coord, thickness, base + spread);
+
+      // A rough surface transmits into a cone rather than a single direction, so the view through
+      // it softens. This is where a glass gets its haze from; a separate blurred copy mixed in
+      // underneath was never part of the material.
+      float scatter = surfaceRoughness() * thickness * 0.35;
+      vec2 tangent = vec2(-1.0, 1.0) * scatter;
+      vec2 bitangent = vec2(1.0, 1.0) * scatter;
       vec4 centre = content.eval(clampCoord(green));
+      vec4 spreadA = content.eval(clampCoord(green + tangent));
+      vec4 spreadB = content.eval(clampCoord(green - tangent));
+      vec4 spreadC = content.eval(clampCoord(green + bitangent));
+      vec4 spreadD = content.eval(clampCoord(green - bitangent));
+      vec4 scattered = (centre * 2.0 + spreadA + spreadB + spreadC + spreadD) / 6.0;
+
       return vec4(
-        content.eval(clampCoord(red)).r,
-        centre.g,
-        content.eval(clampCoord(blue)).b,
+        mix(content.eval(clampCoord(red)).r, scattered.r, 0.5),
+        mix(centre.g, scattered.g, 0.5),
+        mix(content.eval(clampCoord(blue)).b, scattered.b, 0.5),
         centre.a
       );
     }
@@ -441,7 +501,9 @@ internal object LiquidGlassShaders {
       // Confined to the rim by the same falloff that drives the displacement. Unmasked it saturates
       // into a white band along every straight edge, because the edge normal stays aligned with the
       // light for the whole run of the side.
-      float spec = pow(max(dot(normal, lightDir), 0.0), specularExponent) * specularIntensity * heightNorm;
+      // Cook-Torrance rather than a power of the dot product: the highlight now widens and dims
+      // together as the surface roughens, instead of only narrowing.
+      float spec = microfacetSpecular(normal, lightDir, surfaceRoughness()) * specularIntensity * heightNorm;
       // Fresnel brightens what the glass already emits, so it follows the rim falloff too. Applied
       // flat it multiplies the whole edge run and blows the sides out to white.
       float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent) * heightNorm;
