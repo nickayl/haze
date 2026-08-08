@@ -27,6 +27,7 @@ import dev.chrisbanes.haze.RetainedOutputVisualEffect
 import dev.chrisbanes.haze.TrimMemoryLevel
 import dev.chrisbanes.haze.VisualEffect
 import dev.chrisbanes.haze.VisualEffectContext
+import kotlin.math.min
 
 /**
  * A [VisualEffect] implementation that simulates the iOS-style liquid glass look:
@@ -154,7 +155,12 @@ public class LiquidGlassVisualEffect() : VisualEffect, RetainedOutputVisualEffec
     val softnessPx = with(density) { edgeSoftness.toPx() }
     // Refraction samples outside the shape. Without that margin the sampler clamps to the last
     // column of the layer and replicates it, which is the vertical smear along the long sides.
-    val margin = softnessPx + refractionStrength * refractionScale
+    // The reach follows the glass thickness, so it is derived here the same way the shader derives
+    // it: the refraction zone in pixels, times the dimensionless scale. The zone is what carries
+    // the pixels; refractionStrength * refractionScale is under one pixel wide on its own.
+    val minExtent = min(rect.width, rect.height)
+    val zonePx = (refractionHeight.coerceIn(0f, 1f) * minExtent).coerceAtMost(minExtent * 0.5f)
+    val margin = softnessPx + zonePx * refractionScale
     return if (margin > 0f) rect.inflate(margin) else rect
   }
 

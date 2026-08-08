@@ -427,7 +427,11 @@ internal fun LiquidGlassVisualEffect.buildLiquidGlassRenderParams(
     contrast = contrast.coerceIn(-1f, 1f),
     whitePoint = whitePoint.coerceIn(-1f, 1f),
     chromaMultiplier = chromaMultiplier.coerceIn(0f, 2f),
-    refractionScale = refractionScale.coerceAtLeast(0f) * scaleFactor,
+    // Not scaled by scaleFactor: this is a dimensionless multiplier over the refraction zone, and
+    // the zone is already measured in the same downscaled pixels as the rest of the layer. Scaling
+    // it again thins the glass in proportion to the input scale, which the input scale must not
+    // change.
+    refractionScale = refractionScale.coerceAtLeast(0f),
     contentNormalBlend = contentNormalBlend.coerceIn(0f, 1f),
     specularExponent = specularExponent.coerceAtLeast(0f),
     fresnelExponent = fresnelExponent.coerceAtLeast(0f),

@@ -225,15 +225,38 @@ class LiquidGlassShadersTest {
   fun shader_overlayInteriorAndRefractedBandShareTheSameOpacity() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = false)
 
-    // Both branches must weigh re-emitted content by (1 - depth) * (1 - tintAlpha) and add the tint
-    // at its own alpha. When they disagreed, the step between them drew a hard rectangle inset by
-    // the refraction height.
-    assertThat(shader).contains(
-      "float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);",
-    )
+    // Both branches must split the incident light the same way, or the step between them draws a
+    // hard rectangle inset by the refraction height. They meet where the glass is flat, so the
+    // interior evaluates the same terms at normal incidence and over one thickness of travel:
+    // reflectance, its transmitted complement, and Beer-Lambert absorption.
+    assertThat(shader).contains("float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * absorption * transmittance;")
     assertThat(shader).contains("float contentAmount = (1.0 - depthAmount) * absorption * transmittance;")
-    assertThat(shader).contains("float overlayAlpha = contentAmount + tintAlpha;")
+    assertThat(shader).contains("float overlayAlpha = contentAmount + tintWeight + reflectance;")
     assertThat(shader).contains("float overlayAlpha = baseCoeff + refractedCoeff + tintWeight + reflectance;")
+    assertTrue(
+      Regex("""float transmittance = 1\.0 - reflectance;""").findAll(shader).count() == 2,
+      "both branches must derive transmittance from the same reflectance",
+    )
+
+    // The interior formula that ignored the interface entirely, which is what left it the more
+    // opaque of the two.
+    assertThat(shader).doesNotContain("float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);")
+    assertThat(shader).doesNotContain("float overlayAlpha = contentAmount + tintAlpha;")
+  }
+
+  @Test
+  fun shader_interiorAndRimAgreeWhereTheGlassIsFlat() {
+    val shader = LiquidGlassShaders.build(hasBlurredContent = false)
+    val interior = shader.substringAfter("if (distToEdge >= refractionZone) {")
+      .substringBefore("float h = surfaceHeight(coord);")
+
+    // Normal incidence and a path of exactly one thickness are what the refracted branch reduces to
+    // at heightNorm = 0, so the interior states them literally rather than approximating them.
+    assertThat(interior).contains("fresnelReflectance(")
+    assertThat(interior).contains("vec3(0.0, 0.0, 1.0),")
+    assertThat(interior).contains("float absorption = exp(-tintAlpha * 1.6);")
+    assertThat(interior).contains("base.rgb * reflectance")
+    assertThat(shader).contains("float pathLength = (1.0 + heightNorm) / max(shapeNormal.z, 0.15);")
   }
 
   @Test
@@ -242,7 +265,39 @@ class LiquidGlassShadersTest {
 
     // Unmasked, both terms saturate along every straight edge into a white band.
     assertThat(shader).contains("specularIntensity * heightNorm")
-    assertThat(shader).contains("fresnelExponent) * heightNorm")
+
+    // Only the shape half of the Fresnel term is a rim effect. The content half exists on the flat
+    // interior too, so masking the whole term stepped the brightness across the boundary.
+    assertThat(shader).contains("float fresnel = mix(fresnelContent, fresnelShape, heightNorm);")
+    assertThat(shader).doesNotContain("fresnelExponent) * heightNorm")
+  }
+
+  @Test
+  fun shader_scatterVanishesWhereTheGlassIsFlat() {
+    val shader = LiquidGlassShaders.build(hasBlurredContent = false)
+
+    // The interior takes the early-out and samples one sharp pixel. A scatter that did not fade
+    // with the curvature would stop dead at the boundary and draw it as a ring.
+    assertThat(shader).contains(
+      "float scatter = surfaceRoughness() * thickness * 0.35 * clamp(curvature, 0.0, 1.0);",
+    )
+    assertThat(shader).contains("sampleDispersed(coord, glassThickness, heightNorm)")
+  }
+
+  @Test
+  fun shader_onlyTheVariantThatReadsItPaysForTheSingleIndexDisplacement() {
+    val dual = LiquidGlassShaders.build(hasBlurredContent = true)
+    val overlay = LiquidGlassShaders.build(hasBlurredContent = false)
+    val single = LiquidGlassShaders.build(
+      contentMode = LiquidGlassShaders.ContentMode.SingleBlurredInput,
+    )
+
+    // The displacement costs a surface gradient, which is four height evaluations per pixel. Only
+    // the blurred underlay is sampled through it; the others take their sampling points from the
+    // dispersed sampler and never read it.
+    assertThat(dual).contains("vec2 refractCoord = clampCoord(coord + refractionOffset(coord, glassThickness));")
+    assertThat(overlay).doesNotContain("refractCoord")
+    assertThat(single).doesNotContain("refractCoord")
   }
 
   @Test
@@ -258,8 +313,11 @@ class LiquidGlassShadersTest {
   fun shader_multiInputVariantUsesBlurredRefractionForDepth() {
     val shader = LiquidGlassShaders.build(hasBlurredContent = true)
 
+    // Anchored on the call the shader actually makes: substringAfter falls back to the whole string
+    // when its delimiter is missing, so a stale anchor turns a section assertion into a global one
+    // without failing.
     val refractedSection = shader
-      .substringAfter("vec4 refracted = sampleChroma(refractCoord, chromaOffset);")
+      .substringAfter("vec4 refracted = sampleDispersed(coord, glassThickness, heightNorm);")
       .substringBefore("vec2 grad = surfaceGradient(coord);")
     val returnSection = shader
       .substringAfter("vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);")

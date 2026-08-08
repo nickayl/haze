@@ -87,6 +87,26 @@ inner boundary with diagonal corners; `Circle` stays correct here.
 Still open: per-element glass rather than per-panel, and a rim highlight that follows curvature
 rather than a uniform falloff. Both are needed before the result reads like the iOS reference.
 
+## Reviewed after the freeze on 2026-08-08
+
+A read of the frozen code rather than a test run. Six defects, all fixed on this branch.
+
+1. `refractionScale` became a dimensionless multiplier and neither consumer outside the shader
+   followed. The delegate still scaled it by the input scale, thinning the glass in proportion to
+   the downsample, and `calculateLayerBounds` took its margin from `refractionStrength *
+   refractionScale`, which is under one pixel: the captured backdrop no longer reached as far as the
+   shader samples, which is the smear along the long sides. The margin now comes from the refraction
+   zone in pixels. The render-params test still asserted the old pixel semantics.
+2. The flat interior left out the interface physics the refracted band applies, so the two branches
+   disagreed by up to depth times the reflectance and the boundary of the refraction zone drew
+   itself as a rectangle again. The interior now evaluates the same terms at normal incidence.
+3. The Fresnel term followed the rim falloff in whole. Its content half is present on the flat
+   interior too, so only the shape half follows the rim.
+4. Roughness scatter did not fade with the curvature, so the softening stopped dead at that same
+   boundary and drew it as a ring.
+5. The single-index displacement was computed in every mode and read only by the blurred underlay.
+6. Three doc comments sat above the wrong function, one of them twice.
+
 ## Suspended Work
 
 1. Fork artifact completeness.

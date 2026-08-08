@@ -35,7 +35,7 @@ class RuntimeShaderLiquidGlassRenderParamsTest {
       edgeSoftness = 4.dp
       blurRadius = 8.dp
       refractionHeight = 0.25f
-      refractionScale = 12f
+      refractionScale = 0.85f
     }
     val params = effect.buildLiquidGlassRenderParams(
       context = FakeRenderParamsContext(
@@ -54,8 +54,30 @@ class RuntimeShaderLiquidGlassRenderParamsTest {
     assertThat(params.edgeSoftnessPx).isEqualTo(2f)
     assertThat(params.blurRadiusPx).isEqualTo(4f)
     assertThat(params.refractionHeightPx).isEqualTo(5f)
-    assertThat(params.refractionScale).isEqualTo(6f)
+    assertThat(params.refractionScale).isEqualTo(0.85f)
     assertThat(params.lightPosition).isEqualTo(Offset(x = 65f, y = 20f))
+  }
+
+  @Test
+  fun renderParams_leaveTheDimensionlessRefractionScaleAloneAtEveryInputScale() {
+    val effect = LiquidGlassVisualEffect().apply {
+      refractionHeight = 0.25f
+      refractionScale = 0.85f
+    }
+    val context = FakeRenderParamsContext(
+      size = Size(width = 200f, height = 40f),
+      layerSize = Size(width = 260f, height = 100f),
+      layerOffset = Offset(x = 30f, y = 20f),
+    )
+
+    // Every pixel quantity shrinks with the input scale, including the refraction zone. The scale
+    // is a multiplier over that zone, so scaling it as well thins the glass in proportion to the
+    // downsample, and the same surface would render differently at Auto and at None.
+    val full = effect.buildLiquidGlassRenderParams(context, scaleFactor = 1f, layerSize = Size(260f, 100f))
+    val downscaled = effect.buildLiquidGlassRenderParams(context, scaleFactor = 0.5f, layerSize = Size(130f, 50f))
+
+    assertThat(downscaled.refractionScale).isEqualTo(full.refractionScale)
+    assertThat(downscaled.refractionHeightPx).isEqualTo(full.refractionHeightPx / 2f)
   }
 
   @Test

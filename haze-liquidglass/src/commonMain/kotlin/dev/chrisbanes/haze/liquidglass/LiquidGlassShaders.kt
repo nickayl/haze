@@ -172,12 +172,6 @@ internal object LiquidGlassShaders {
     }
 
     /**
-     * Where a viewing ray lands on the backdrop after entering the glass, in pixels from the
-     * sampling point. Ortho view, so the incident ray is straight down; the surface normal comes
-     * from the slope of the glass, the ray bends by Snell's law, and it travels the thickness of
-     * the glass before reaching the content behind it.
-     */
-    /**
      * Fresnel reflectance at an air-to-glass interface for unpolarised light.
      *
      * At normal incidence only about 4% of the light reflects and the rest is transmitted; as the
@@ -199,21 +193,6 @@ internal object LiquidGlassShaders {
       return clamp((rs * rs + rp * rp) * 0.5, 0.0, 1.0);
     }
 
-    /**
-     * Where a viewing ray lands on the backdrop, having crossed both faces of the glass.
-     *
-     * Entering, the ray bends towards the normal by n1/n2; leaving through the flat back face it
-     * bends away again by n2/n1. Modelling only the first interface exaggerates the displacement
-     * and, worse, keeps bending light that a real slab would have straightened on the way out.
-     */
-    /**
-     * What the rim reflects, sampled from the scene itself.
-     *
-     * A mirror shows its surroundings, not a grey. With no environment map the nearest honest
-     * approximation is the content plane seen along the reflected ray: the surface normal turns the
-     * view vector outwards, and the further the ray travels before meeting the plane the further
-     * across the backdrop it lands. A flat grey rim is what made the edge read as painted on.
-     */
     /**
      * Roughness derived from the specular exponent, so the existing control keeps its meaning: a
      * high exponent is a polished surface and a low one is satin.
@@ -262,6 +241,14 @@ internal object LiquidGlassShaders {
       return (d * g) / max(4.0 * nDotV * nDotL, 0.0001) * nDotL;
     }
 
+    /**
+     * What the rim reflects, sampled from the scene itself.
+     *
+     * A mirror shows its surroundings, not a grey. With no environment map the nearest honest
+     * approximation is the content plane seen along the reflected ray: the surface normal turns the
+     * view vector outwards, and the further the ray travels before meeting the plane the further
+     * across the backdrop it lands. A flat grey rim is what made the edge read as painted on.
+     */
     vec3 reflectedEnvironment(vec2 coord, vec3 normal, float thickness) {
       vec3 view = vec3(0.0, 0.0, -1.0);
       vec3 mirrored = reflect(view, normal);
@@ -271,6 +258,15 @@ internal object LiquidGlassShaders {
       return content.eval(clampCoord(coord + mirrored.xy * travel)).rgb;
     }
 
+    /**
+     * Where a viewing ray lands on the backdrop, having crossed both faces of the glass, in pixels
+     * from the sampling point.
+     *
+     * Ortho view, so the incident ray is straight down. Entering, the ray bends towards the normal
+     * by n1/n2; leaving through the flat back face it bends away again by n2/n1. Modelling only the
+     * first interface exaggerates the displacement and, worse, keeps bending light that a real slab
+     * would have straightened on the way out.
+     */
     vec2 refractionOffsetAt(vec2 coord, float thickness, float ior) {
       vec2 slope = surfaceGradient(coord);
       vec3 normal = normalize(vec3(-slope, 1.0));
@@ -300,7 +296,7 @@ internal object LiquidGlassShaders {
      * index and its own landing point. That is what fringes a rim magenta on one side and cyan on
      * the other, and it follows the whole perimeter because it follows the surface slope.
      */
-    vec4 sampleDispersed(vec2 coord, float thickness) {
+    vec4 sampleDispersed(vec2 coord, float thickness, float curvature) {
       float base = mix(1.0, 1.55, clamp(refractionStrength, 0.0, 1.0));
       // No index may fall below one: that is the vacuum, and a medium thinner than air would bend
       // the long wavelength the wrong way, swapping the fringes. With a weak refraction or a strong
@@ -334,7 +330,10 @@ internal object LiquidGlassShaders {
       // A rough surface transmits into a cone rather than a single direction, so the view through
       // it softens. This is where a glass gets its haze from; a separate blurred copy mixed in
       // underneath was never part of the material.
-      float scatter = surfaceRoughness() * thickness * 0.35;
+      // It follows the curvature because the flat interior takes the early-out path, which samples
+      // one sharp pixel: held constant, the softening would stop dead at the boundary of the
+      // refraction zone and draw that boundary as a ring.
+      float scatter = surfaceRoughness() * thickness * 0.35 * clamp(curvature, 0.0, 1.0);
       vec2 tangent = vec2(-1.0, 1.0) * scatter;
       vec2 bitangent = vec2(1.0, 1.0) * scatter;
       vec4 centre = content.eval(clampCoord(green));
@@ -430,8 +429,6 @@ internal object LiquidGlassShaders {
         float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent);
         float ambient = mix(1.0, 1.0 + fresnel, clamp(ambientResponse, 0.0, 1.0));
 
-        vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
-        vec3 finalColor = tinted * ambient;
         ${flatInteriorReturn(contentMode)}
       }
 
@@ -444,12 +441,10 @@ internal object LiquidGlassShaders {
       // field scaled by a constant. The bending now follows the surface slope, so it vanishes on
       // the flat interior and grows into the curve on its own.
       float glassThickness = refractionZone * refractionScale;
-      vec2 displacement = refractionOffset(coord, glassThickness);
-      vec2 refractCoord = clampCoord(coord + displacement);
 
       // Dispersion replaces the old corner-weighted offset, which only fringed the extreme corners
       // because its weight was |x*y| and therefore zero along both centre axes.
-      vec4 refracted = sampleDispersed(coord, glassThickness);
+      vec4 refracted = sampleDispersed(coord, glassThickness, heightNorm);
       ${refractedDepthSample(contentMode)}
       ${refractedColor(contentMode)}
 
@@ -460,7 +455,6 @@ internal object LiquidGlassShaders {
 
       ${refractedDepthMix(contentMode)}
       vec3 graded = applyColorGrading(vec4(mixedColor, 1.0)).rgb;
-      vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
       vec2 lightDir2D = safeNormalize(lightPosition - coord, vec2(0.0, -1.0));
       vec3 lightDir = normalize(vec3(lightDir2D, 1.0));
       // Confined to the rim by the same falloff that drives the displacement. Unmasked it saturates
@@ -469,9 +463,13 @@ internal object LiquidGlassShaders {
       // Cook-Torrance rather than a power of the dot product: the highlight now widens and dims
       // together as the surface roughens, instead of only narrowing.
       float spec = microfacetSpecular(normal, lightDir, surfaceRoughness()) * specularIntensity * heightNorm;
-      // Fresnel brightens what the glass already emits, so it follows the rim falloff too. Applied
-      // flat it multiplies the whole edge run and blows the sides out to white.
-      float fresnel = pow(1.0 - max(dot(normal, vec3(0.0, 0.0, 1.0)), 0.0), fresnelExponent) * heightNorm;
+      // Fresnel brightens what the glass already emits, so the shape term follows the rim falloff
+      // too. Applied flat it multiplies the whole edge run and blows the sides out to white. The
+      // content term does not follow it: the flat interior has that term as well, so cancelling it
+      // here would step the brightness across the boundary between the two branches.
+      float fresnelShape = pow(1.0 - max(normal.z, 0.0), fresnelExponent);
+      float fresnelContent = pow(1.0 - max(contentNormal.z, 0.0), fresnelExponent);
+      float fresnel = mix(fresnelContent, fresnelShape, heightNorm);
       float ambient = mix(1.0, 1.0 + fresnel, clamp(ambientResponse, 0.0, 1.0));
       ${refractedReturn(contentMode)}
     }
@@ -557,23 +555,49 @@ internal object LiquidGlassShaders {
   private fun flatInteriorReturn(contentMode: ContentMode): String = when (contentMode) {
     ContentMode.DualInput,
     ContentMode.SingleBlurredInput,
-    -> "return vec4(finalColor, base.a);"
+    -> """
+        vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
+        vec3 finalColor = tinted * ambient;
+        return vec4(finalColor, base.a);
+    """
 
     // The tint belongs to the glass, not to the content behind it, so it keeps its own weight over
     // the blurred underlay while only the re-emitted content follows depth. The refracted branch
     // below composes the same way, which is what keeps the two continuous.
     ContentMode.OverlayWithExternalUnderlay ->
       """
+        // The same interface physics as the refracted branch, evaluated where the glass is flat:
+        // normal incidence, and a ray crossing one thickness straight down. Leaving them out here
+        // made this branch the more opaque of the two, and the step drew the boundary of the
+        // refraction zone as a rectangle inset from the edge.
         float tintAlpha = clamp(tintColor.a, 0.0, 1.0);
-        float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * (1.0 - tintAlpha);
-        float overlayAlpha = contentAmount + tintAlpha;
-        vec3 overlayColor = graded * ambient * contentAmount + tintColor.rgb * ambient * tintAlpha;
+        float reflectance = fresnelReflectance(
+          vec3(0.0, 0.0, 1.0),
+          mix(1.0, 1.55, clamp(refractionStrength, 0.0, 1.0))
+        );
+        float transmittance = 1.0 - reflectance;
+        float absorption = exp(-tintAlpha * 1.6);
+        float contentAmount = (1.0 - clamp(depth, 0.0, 1.0)) * absorption * transmittance;
+        float tintWeight = (1.0 - absorption) * transmittance;
+        float overlayAlpha = contentAmount + tintWeight + reflectance;
+        // At normal incidence the mirrored ray runs straight back at the viewer, so what the rim
+        // samples along it here is the content at this very pixel.
+        vec3 overlayColor = graded * ambient * contentAmount +
+          tintColor.rgb * ambient * tintWeight +
+          base.rgb * reflectance;
         return vec4(overlayColor, base.a * overlayAlpha) * edgeMask(sd);
     """
   }
 
+  // Only this mode reads the single-index displacement; the others take their sampling points from
+  // the dispersed sampler, so computing it for them is one surface gradient per pixel for nothing.
   private fun refractedDepthSample(contentMode: ContentMode): String = when (contentMode) {
-    ContentMode.DualInput -> "vec4 blurred = sampleBlurredContent(refractCoord);"
+    ContentMode.DualInput ->
+      """
+      vec2 refractCoord = clampCoord(coord + refractionOffset(coord, glassThickness));
+      vec4 blurred = sampleBlurredContent(refractCoord);
+      """
+
     ContentMode.SingleBlurredInput,
     ContentMode.OverlayWithExternalUnderlay,
     -> ""
@@ -599,6 +623,7 @@ internal object LiquidGlassShaders {
     ContentMode.DualInput,
     ContentMode.SingleBlurredInput,
     -> """
+      vec3 tinted = mix(graded, tintColor.rgb, tintColor.a);
       vec3 finalColor = mix(tinted, refractedColor, refractionStrength) * ambient + spec;
       float edge = edgeMask(sd);
       return vec4(finalColor, base.a) * edge;
