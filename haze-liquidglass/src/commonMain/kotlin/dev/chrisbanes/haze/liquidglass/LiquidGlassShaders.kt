@@ -290,7 +290,9 @@ internal object LiquidGlassShaders {
       float distToEdge = max(-sd, 0.0);
 
       // Flat-interior early-out: skip refraction when far from edge.
-      float refractionZone = max(refractionHeight, 0.0001);
+      // Same bound as surfaceHeightAt: the two must agree or the interior test and the displacement
+      // disagree about where the glass edge ends.
+      float refractionZone = max(min(refractionHeight, min(halfSize.x, halfSize.y) * 0.5), 0.0001);
       if (distToEdge >= refractionZone) {
         vec4 base = content.eval(coord);
         ${flatInteriorDepthMix(contentMode)}
@@ -312,7 +314,9 @@ internal object LiquidGlassShaders {
 
       float h = surfaceHeight(coord);
       float heightNorm = clamp(h / refractionZone, 0.0, 1.0);
-      float displacementMagnitude = -heightNorm * refractionStrength * refractionScale; // Scale factor for refraction displacement
+      // Proportional to the zone, so the same style lenses identically on a chip and on a sheet.
+      // A fixed pixel scale made the effect invisible on anything but a very small element.
+      float displacementMagnitude = -heightNorm * refractionStrength * refractionScale * refractionZone;
 
       float smoothRadius = max(radius * 1.5, 30.0);
       float gradRadius = min(smoothRadius, min(halfSize.x, halfSize.y));

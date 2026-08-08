@@ -70,7 +70,7 @@ package dev.chrisbanes.haze.liquidglass {
     field public static final float depth = 0.4f;
     field public static final float fresnelExponent = 3.0f;
     field public static final float refractionHeight = 0.25f;
-    field public static final float refractionScale = 12.0f;
+    field public static final float refractionScale = 0.85f;
     field public static final float refractionStrength = 0.7f;
     field public static final float specularExponent = 24.0f;
     field public static final float specularIntensity = 0.4f;

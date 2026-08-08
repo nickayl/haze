@@ -29,7 +29,7 @@ public object LiquidGlassDefaults {
   public const val contrast: Float = 0f // -1..1 range
   public const val whitePoint: Float = 0f // -1..1 range
   public const val chromaMultiplier: Float = 1f // 0..2 range
-  public const val refractionScale: Float = 12f
+  public const val refractionScale: Float = 0.85f
   public const val contentNormalBlend: Float = 0.15f
   public const val specularExponent: Float = 24f
   public const val fresnelExponent: Float = 3f
